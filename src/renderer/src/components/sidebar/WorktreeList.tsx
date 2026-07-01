@@ -63,7 +63,7 @@ import type {
   WorkspaceStatusDefinition
 } from '../../../../shared/types'
 import { DEFAULT_SHOW_SLEEPING_WORKSPACES } from '../../../../shared/constants'
-import { buildWorktreeComparator } from './smart-sort'
+import { buildWorktreeComparator, compareWorktreeSortLabel } from './smart-sort'
 import {
   buildAttentionByWorktree,
   type SmartClass,
@@ -5192,7 +5192,7 @@ const WorktreeList = React.memo(function WorktreeList({
         sessionHasHadPty.current = true
       } else {
         nonArchivedWorktrees.sort(
-          (a, b) => b.sortOrder - a.sortOrder || a.displayName.localeCompare(b.displayName)
+          (a, b) => b.sortOrder - a.sortOrder || compareWorktreeSortLabel(a, b)
         )
         lastAttentionByWorktreeRef.current = null
         return nonArchivedWorktrees.map((w) => w.id)
