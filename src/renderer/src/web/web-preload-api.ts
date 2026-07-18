@@ -240,6 +240,7 @@ type WebGitHubRouteKey =
   | 'prFileContents'
   | 'listIssues'
   | 'createIssue'
+  | 'uploadIssueImage'
   | 'countWorkItems'
   | 'listWorkItems'
   | 'prChecks'
@@ -288,6 +289,7 @@ type WebGitHubRuntimeMethod =
   | 'github.prFileContents'
   | 'github.listIssues'
   | 'github.createIssue'
+  | 'github.uploadIssueImage'
   | 'github.countWorkItems'
   | 'github.listWorkItems'
   | 'github.prChecks'
@@ -389,6 +391,7 @@ export const GITHUB_WEB_RPC_METHODS = {
   prFileContents: 'github.prFileContents',
   listIssues: 'github.listIssues',
   createIssue: 'github.createIssue',
+  uploadIssueImage: 'github.uploadIssueImage',
   countWorkItems: 'github.countWorkItems',
   listWorkItems: 'github.listWorkItems',
   prChecks: 'github.prChecks',
@@ -1990,6 +1993,8 @@ function createGitHubApi(): WebGitHubApi {
       route<WebGitHubResult<'listIssues'>>(GITHUB_WEB_RPC_METHODS.listIssues, args),
     createIssue: (args) =>
       route<WebGitHubResult<'createIssue'>>(GITHUB_WEB_RPC_METHODS.createIssue, args),
+    uploadIssueImage: (args) =>
+      route<WebGitHubResult<'uploadIssueImage'>>(GITHUB_WEB_RPC_METHODS.uploadIssueImage, args),
     countWorkItems: (args) =>
       route<WebGitHubResult<'countWorkItems'>>(GITHUB_WEB_RPC_METHODS.countWorkItems, args),
     listWorkItems: (args) =>

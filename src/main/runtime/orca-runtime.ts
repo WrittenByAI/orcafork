@@ -396,6 +396,7 @@ import {
   requestPRReviewers,
   removePRReviewers,
   createIssue,
+  uploadIssueImage,
   updateIssue,
   addIssueComment,
   addPRReviewComment,
@@ -13609,6 +13610,22 @@ export class OrcaRuntimeService {
       repo.issueSourcePreference,
       repo.connectionId ?? null,
       fields,
+      ...this.getLocalGitExecutionOptionArgs(repo)
+    )
+  }
+
+  async uploadRepoIssueImage(
+    repoSelector: string,
+    imageBase64: string,
+    fileName: string
+  ): Promise<Awaited<ReturnType<typeof uploadIssueImage>>> {
+    const repo = await this.resolveRepoSelector(repoSelector)
+    return uploadIssueImage(
+      repo.path,
+      imageBase64,
+      fileName,
+      repo.issueSourcePreference,
+      repo.connectionId ?? null,
       ...this.getLocalGitExecutionOptionArgs(repo)
     )
   }

@@ -92,6 +92,7 @@ import type {
   GitUpstreamStatus,
   GitHubAssignableUser,
   GitHubCreateIssueResult,
+  GitHubUploadIssueImageResult,
   GitHubPRFile,
   GitHubPRFileContents,
   GitHubPrStartPoint,
@@ -1520,6 +1521,12 @@ export type PreloadApi = {
       labels?: string[]
       assignees?: string[]
     }) => Promise<GitHubCreateIssueResult>
+    uploadIssueImage: (
+      args: GitHubRepoSelectorArgs & {
+        imageBase64: string
+        fileName: string
+      }
+    ) => Promise<GitHubUploadIssueImageResult>
     countWorkItems: (args: { repoPath: string; repoId?: string; query?: string }) => Promise<number>
     listWorkItems: (args: {
       repoPath: string

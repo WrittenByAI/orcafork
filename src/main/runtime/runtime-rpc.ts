@@ -231,6 +231,7 @@ const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'git.unstage',
   'git.upstreamStatus',
   'github.createIssue',
+  'github.uploadIssueImage',
   'github.addIssueComment',
   'github.addPRReviewComment',
   'github.addPRReviewCommentReply',

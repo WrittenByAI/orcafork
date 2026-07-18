@@ -27,6 +27,7 @@ import type {
   GitHubAssignableUser,
   GitHubCommentResult,
   GitHubCreateIssueResult,
+  GitHubUploadIssueImageResult,
   GitHubWorkItem,
   JiraProjectStatusOrder,
   GitPushTarget,
@@ -1301,6 +1302,14 @@ const api = {
       labels?: string[]
       assignees?: string[]
     }): Promise<GitHubCreateIssueResult> => ipcRenderer.invoke('gh:createIssue', args),
+
+    uploadIssueImage: (args: {
+      repoPath: string
+      repoId?: string
+      sourceContext?: TaskSourceContext | null
+      imageBase64: string
+      fileName: string
+    }): Promise<GitHubUploadIssueImageResult> => ipcRenderer.invoke('gh:uploadIssueImage', args),
 
     countWorkItems: (args: {
       repoPath: string

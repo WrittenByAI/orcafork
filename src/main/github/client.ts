@@ -90,6 +90,7 @@ export {
   listLabels,
   listAssignableUsers
 } from './issues'
+export { uploadIssueImage } from './issue-images'
 import {
   mapCheckRunRESTStatus,
   mapCheckRunRESTConclusion,

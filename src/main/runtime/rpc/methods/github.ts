@@ -156,6 +156,11 @@ const CreateIssue = RepoSelector.extend({
   assignees: z.array(z.string()).optional()
 })
 
+const UploadIssueImage = RepoSelector.extend({
+  imageBase64: requiredString('Missing image'),
+  fileName: requiredString('Missing file name')
+})
+
 const IssueUpdate = z.object({
   state: z.enum(['open', 'closed']).optional(),
   title: OptionalString,
@@ -502,6 +507,12 @@ export const GITHUB_METHODS: RpcMethod[] = [
         ? runtime.createRepoIssue(params.repo, params.title, params.body, fields)
         : runtime.createRepoIssue(params.repo, params.title, params.body)
     }
+  }),
+  defineMethod({
+    name: 'github.uploadIssueImage',
+    params: UploadIssueImage,
+    handler: async (params, { runtime }) =>
+      runtime.uploadRepoIssueImage(params.repo, params.imageBase64, params.fileName)
   }),
   defineMethod({
     name: 'github.updateIssue',

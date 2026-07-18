@@ -485,6 +485,31 @@ describe('github RPC methods', () => {
     expect(response).toMatchObject({ ok: true, result: { ok: true, number: 4 } })
   })
 
+  it('uploads a canvas screenshot on the runtime server', async () => {
+    const runtime = {
+      getRuntimeId: () => 'test-runtime',
+      uploadRepoIssueImage: vi.fn().mockResolvedValue({
+        ok: true,
+        url: 'https://raw.githubusercontent.com/acme/orca/x/shot.png'
+      })
+    } as unknown as OrcaRuntimeService
+    const dispatcher = new RpcDispatcher({ runtime, methods: GITHUB_METHODS })
+
+    const response = await dispatcher.dispatch(
+      makeRequest('github.uploadIssueImage', {
+        repo: 'repo-1',
+        imageBase64: 'aGVsbG8=',
+        fileName: 'shot.png'
+      })
+    )
+
+    expect(runtime.uploadRepoIssueImage).toHaveBeenCalledWith('repo-1', 'aGVsbG8=', 'shot.png')
+    expect(response).toMatchObject({
+      ok: true,
+      result: { ok: true, url: 'https://raw.githubusercontent.com/acme/orca/x/shot.png' }
+    })
+  })
+
   it('updates issues on the runtime server', async () => {
     const runtime = {
       getRuntimeId: () => 'test-runtime',

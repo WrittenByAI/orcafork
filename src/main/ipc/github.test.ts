@@ -31,6 +31,7 @@ const {
   listWorkItemsMock,
   countWorkItemsMock,
   createIssueMock,
+  uploadIssueImageMock,
   updateIssueMock,
   addIssueCommentMock,
   listLabelsMock,
@@ -73,6 +74,7 @@ const {
   listWorkItemsMock: vi.fn(),
   countWorkItemsMock: vi.fn(),
   createIssueMock: vi.fn(),
+  uploadIssueImageMock: vi.fn(),
   updateIssueMock: vi.fn(),
   addIssueCommentMock: vi.fn(),
   listLabelsMock: vi.fn(),
@@ -115,6 +117,7 @@ vi.mock('../github/client', () => ({
   listWorkItems: listWorkItemsMock,
   countWorkItems: countWorkItemsMock,
   createIssue: createIssueMock,
+  uploadIssueImage: uploadIssueImageMock,
   updateIssue: updateIssueMock,
   addIssueComment: addIssueCommentMock,
   listLabels: listLabelsMock,
@@ -221,6 +224,7 @@ describe('registerGitHubHandlers', () => {
     listWorkItemsMock.mockReset()
     countWorkItemsMock.mockReset()
     createIssueMock.mockReset()
+    uploadIssueImageMock.mockReset()
     updateIssueMock.mockReset()
     addIssueCommentMock.mockReset()
     listLabelsMock.mockReset()
@@ -701,6 +705,7 @@ describe('registerGitHubHandlers', () => {
     countWorkItemsMock.mockResolvedValue(0)
     getIssueMock.mockResolvedValue(null)
     createIssueMock.mockResolvedValue({ ok: true, number: 1, url: 'https://example.com/1' })
+    uploadIssueImageMock.mockResolvedValue({ ok: true, url: 'https://example.com/shot.png' })
     updateIssueMock.mockResolvedValue({ ok: true })
     addIssueCommentMock.mockResolvedValue({ ok: true })
     listLabelsMock.mockResolvedValue([])
@@ -746,6 +751,11 @@ describe('registerGitHubHandlers', () => {
       title: 'Title',
       body: 'Body',
       labels: ['bug']
+    })
+    await handlers['gh:uploadIssueImage'](null, {
+      repoPath: '/workspace/repo',
+      imageBase64: 'aGVsbG8=',
+      fileName: 'shot.png'
     })
     await handlers['gh:updateIssue'](
       { sender: { id: 1 } },
@@ -817,6 +827,14 @@ describe('registerGitHubHandlers', () => {
       undefined,
       null,
       { labels: ['bug'], assignees: undefined },
+      localGitOptions
+    )
+    expect(uploadIssueImageMock).toHaveBeenCalledWith(
+      '/workspace/repo',
+      'aGVsbG8=',
+      'shot.png',
+      undefined,
+      null,
       localGitOptions
     )
     expect(updateIssueMock).toHaveBeenCalledWith(

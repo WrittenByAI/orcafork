@@ -712,7 +712,7 @@ export type WorktreeLineageWarning = {
 // a diff so they can be handed back to an AI agent (pasted into a terminal
 // or used to bootstrap a new agent session). Stored on WorktreeMeta so the
 // existing persistence layer writes them to orca-data.json automatically.
-export type DiffCommentSource = 'diff' | 'markdown'
+export type DiffCommentSource = 'diff' | 'markdown' | 'canvas'
 export type DiffReviewScope = 'unstaged' | 'staged' | 'branch'
 
 export type MobileDiffReviewFileState = {
@@ -1759,6 +1759,8 @@ export type GitHubCreateIssueFields = {
 export type GitHubCreateIssueResult =
   | { ok: true; number: number; url: string; bodySaveWarning?: string }
   | { ok: false; error: string }
+
+export type GitHubUploadIssueImageResult = { ok: true; url: string } | { ok: false; error: string }
 
 export type GitHubIssueCloseReason = 'completed' | 'not_planned' | 'duplicate'
 

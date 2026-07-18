@@ -2376,6 +2376,7 @@ describe('web GitHub preload API', () => {
         'updatePRTitle',
         'updateProjectItemField',
         'updatePullRequestBySlug',
+        'uploadIssueImage',
         'viewer',
         'workItem',
         'workItemByOwnerRepo',
@@ -2504,6 +2505,12 @@ describe('web GitHub preload API', () => {
         args: { repoPath, title: 'Bug', body: 'Details' },
         expectedMethod: 'github.createIssue',
         expectedParams: withRepo({ repoPath, title: 'Bug', body: 'Details' })
+      },
+      {
+        key: 'uploadIssueImage',
+        args: { repoPath, imageBase64: 'aGVsbG8=', fileName: 'shot.png' },
+        expectedMethod: 'github.uploadIssueImage',
+        expectedParams: withRepo({ repoPath, imageBase64: 'aGVsbG8=', fileName: 'shot.png' })
       },
       {
         key: 'countWorkItems',

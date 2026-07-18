@@ -30,6 +30,7 @@ import {
   getWorkItem,
   getWorkItemByOwnerRepo,
   createIssue,
+  uploadIssueImage,
   updateIssue,
   addIssueComment,
   listLabels,
@@ -419,6 +420,21 @@ export function registerGitHubHandlers(store: Store, stats: StatsCollector): voi
         repo.issueSourcePreference,
         repoConnectionId(repo),
         fields,
+        ...localGitOptionArgs(store, repo)
+      )
+    }
+  )
+
+  ipcMain.handle(
+    'gh:uploadIssueImage',
+    (_event, args: RepoScopedArgs & { imageBase64: string; fileName: string }) => {
+      const repo = assertRegisteredRepo(args, store)
+      return uploadIssueImage(
+        repo.path,
+        args.imageBase64,
+        args.fileName,
+        repo.issueSourcePreference,
+        repoConnectionId(repo),
         ...localGitOptionArgs(store, repo)
       )
     }
