@@ -25,6 +25,7 @@ const EXT_TO_LANGUAGE: Record<string, string> = {
   // would flag every record after line one as trailing content.
   '.jsonl': 'jsonl',
   '.ipynb': 'notebook',
+  '.tldr': 'tldraw',
   '.md': 'markdown',
   '.mdx': 'markdown',
   '.mmd': 'mermaid',

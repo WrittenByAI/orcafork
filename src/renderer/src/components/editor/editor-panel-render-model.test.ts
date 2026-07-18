@@ -109,6 +109,29 @@ describe('getEditorPanelRenderModel HTML preview affordance', () => {
   })
 })
 
+describe('getEditorPanelRenderModel tldraw canvas tabs', () => {
+  it('flags .tldr edit tabs as isTldraw with a rich-only view mode toggle', () => {
+    const tldrawFile = markdownFile({
+      id: '/repo/board.tldr',
+      filePath: '/repo/board.tldr',
+      relativePath: 'board.tldr',
+      language: 'tldraw'
+    })
+    const model = renderModel({
+      activeFile: tldrawFile,
+      fileContents: { '/repo/board.tldr': textContent({ content: '{}' }) }
+    })
+
+    expect(model.isTldraw).toBe(true)
+    expect(model.mdViewMode).toBe('rich')
+    expect(model.availableEditorToggleModes).toEqual(['source', 'rich'])
+  })
+
+  it('does not flag ordinary markdown tabs as isTldraw', () => {
+    expect(renderModel({}).isTldraw).toBe(false)
+  })
+})
+
 describe('getEditorPanelRenderModel read-only raw rendering (AI Vault View Log)', () => {
   it('renders a read-only markdown log as raw source with no markdown viewer or chrome', () => {
     const model = renderModel({ activeFile: markdownFile({ readOnly: true }) })

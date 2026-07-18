@@ -45,6 +45,7 @@ const ImageDiffViewer = lazy(() => import('./ImageDiffViewer'))
 const MermaidViewer = lazy(() => import('./MermaidViewer'))
 const CsvViewer = lazy(() => import('./CsvViewer'))
 const IpynbViewer = lazy(() => import('./IpynbViewer'))
+const TldrawViewer = lazy(() => import('./TldrawViewer'))
 
 // Why: stable no-op callbacks for read-only tabs so Monaco never routes a
 // content-change or save through the writable pipeline (and so we don't create
@@ -133,6 +134,7 @@ export function EditorContent({
   isMermaid,
   isCsv,
   isNotebook,
+  isTldraw = false,
   mdViewMode,
   isChangesMode,
   sideBySide,
@@ -160,6 +162,7 @@ export function EditorContent({
   isMermaid: boolean
   isCsv: boolean
   isNotebook: boolean
+  isTldraw?: boolean
   mdViewMode: MarkdownViewMode
   isChangesMode: boolean
   sideBySide: boolean
@@ -185,7 +188,8 @@ export function EditorContent({
     viewStateScopeId === activeFile.id
       ? `${activeFile.id}:preview`
       : `${activeFile.id}::${viewStateScopeId}:preview`
-  const monacoLanguage = resolvedLanguage === 'notebook' ? 'json' : resolvedLanguage
+  const monacoLanguage =
+    resolvedLanguage === 'notebook' || resolvedLanguage === 'tldraw' ? 'json' : resolvedLanguage
 
   const openConflictReviewFile = useAppStore((s) => s.openConflictReviewFile)
   const openConflictReview = useAppStore((s) => s.openConflictReview)
@@ -546,7 +550,8 @@ export function EditorContent({
     }
 
     const selectedLanguage = detectLanguage(contentFile.relativePath)
-    const monacoSelectedLanguage = selectedLanguage === 'notebook' ? 'json' : selectedLanguage
+    const monacoSelectedLanguage =
+      selectedLanguage === 'notebook' || selectedLanguage === 'tldraw' ? 'json' : selectedLanguage
     const selectedViewStateKey = `${contentFile.filePath}::${viewStateScopeId}:${viewStateKeySuffix}`
     const selectedContent = editBuffers[contentFile.id] ?? fc.content
 
@@ -851,6 +856,18 @@ export function EditorContent({
               filePath={activeFile.filePath}
               worktreeId={activeFile.worktreeId}
               scrollCacheKey={`${editorViewStateKey}:notebook`}
+              onContentChange={handleContentChange}
+              onDirtyStateHint={handleDirtyStateHint}
+              onSave={handleSave}
+            />
+          ) : isTldraw && mdViewMode === 'rich' ? (
+            <TldrawViewer
+              key={activeFile.id}
+              content={editBuffers[activeFile.id] ?? fc.content}
+              fileId={activeFile.id}
+              filePath={activeFile.filePath}
+              worktreeId={activeFile.worktreeId}
+              relativePath={activeFile.relativePath}
               onContentChange={handleContentChange}
               onDirtyStateHint={handleDirtyStateHint}
               onSave={handleSave}

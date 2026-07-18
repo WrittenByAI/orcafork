@@ -1,8 +1,18 @@
 import { useMemo } from 'react'
-import { ArrowDown, ArrowUp, Columns2, Eye, FileText, ListTree, Rows2 } from 'lucide-react'
+import {
+  ArrowDown,
+  ArrowUp,
+  Columns2,
+  Eye,
+  FileText,
+  ListTree,
+  Rows2,
+  Shapes,
+  type LucideIcon
+} from 'lucide-react'
 import { useAppStore } from '@/store'
 import { selectWorktreeDiffCommentsOrEmpty } from '@/store/worktree-diff-comments-selector'
-import type { OpenFile } from '@/store/slices/editor'
+import type { MarkdownViewMode, OpenFile } from '@/store/slices/editor'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import EditorViewToggle, {
   CSV_VIEW_MODE_METADATA,
@@ -18,6 +28,24 @@ import { useDiffNavigation } from './diff-navigation-context'
 import { useShortcutKeyDetails } from '@/hooks/useShortcutLabel'
 import { ShortcutKeyCombo } from '@/components/ShortcutKeyCombo'
 
+// Why: tldraw canvas tabs reuse the 'rich' view mode slot (the canvas itself)
+// but the Pencil icon/"Rich Editor" label from the default metadata implies a
+// text editor. Override the label/icon the same way CSV_VIEW_MODE_METADATA and
+// NOTEBOOK_VIEW_MODE_METADATA do for their own 'rich' slots — kept local to
+// this file (rather than alongside those two in EditorViewToggle.tsx) because
+// this component tree does not own EditorViewToggle.tsx. The shape matches
+// EditorViewToggle's metadataOverride prop structurally.
+const TLDRAW_VIEW_MODE_METADATA: Partial<
+  Record<MarkdownViewMode, { label: string; icon: LucideIcon }>
+> = {
+  rich: {
+    get label() {
+      return translate('auto.components.editor.EditorPanelHeader.e2e42b36fd', 'Canvas')
+    },
+    icon: Shapes
+  }
+}
+
 type EditorPanelHeaderProps = {
   activeFile: OpenFile
   copiedPathVisible: boolean
@@ -26,6 +54,7 @@ type EditorPanelHeaderProps = {
   isMarkdown: boolean
   isCsv: boolean
   isNotebook: boolean
+  isTldraw?: boolean
   hasEditorToggle: boolean
   availableEditorToggleModes: readonly EditorToggleValue[]
   effectiveToggleValue: EditorToggleValue
@@ -60,6 +89,7 @@ export function EditorPanelHeader({
   isMarkdown,
   isCsv,
   isNotebook,
+  isTldraw = false,
   hasEditorToggle,
   availableEditorToggleModes,
   effectiveToggleValue,
@@ -170,7 +200,7 @@ export function EditorPanelHeader({
           </Tooltip>
         </TooltipProvider>
       )}
-      {isSingleDiff && fileDiffComments.length > 0 && (
+      {(isSingleDiff || isTldraw) && fileDiffComments.length > 0 && (
         <DiffNotesSendMenu
           worktreeId={activeFile.worktreeId}
           groupId={activeGroupId ?? activeFile.worktreeId}
@@ -269,7 +299,13 @@ export function EditorPanelHeader({
           modes={availableEditorToggleModes}
           onChange={onEditorToggleChange}
           metadataOverride={
-            isCsv ? CSV_VIEW_MODE_METADATA : isNotebook ? NOTEBOOK_VIEW_MODE_METADATA : undefined
+            isCsv
+              ? CSV_VIEW_MODE_METADATA
+              : isNotebook
+                ? NOTEBOOK_VIEW_MODE_METADATA
+                : isTldraw
+                  ? TLDRAW_VIEW_MODE_METADATA
+                  : undefined
           }
         />
       )}

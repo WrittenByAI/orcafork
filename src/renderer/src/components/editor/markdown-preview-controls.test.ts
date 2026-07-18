@@ -44,6 +44,24 @@ describe('getMarkdownViewModes', () => {
       })
     ).toEqual(['source', 'rich'])
   })
+
+  it('offers source and rich for tldraw edit tabs', () => {
+    expect(
+      getMarkdownViewModes({
+        language: 'tldraw',
+        mode: 'edit'
+      })
+    ).toEqual(['source', 'rich'])
+  })
+
+  it('keeps tldraw toggles to source and rich without Changes', () => {
+    expect(
+      getEditorToggleModes({
+        language: 'tldraw',
+        mode: 'edit'
+      })
+    ).toEqual(['source', 'rich'])
+  })
 })
 
 describe('markdown preview helpers', () => {
@@ -64,6 +82,15 @@ describe('markdown preview helpers', () => {
         diffSource: 'unstaged'
       })
     ).toBe('source')
+  })
+
+  it('defaults tldraw edit tabs to rich mode', () => {
+    expect(
+      getDefaultMarkdownViewMode({
+        language: 'tldraw',
+        mode: 'edit'
+      })
+    ).toBe('rich')
   })
 
   it('opens dedicated preview tabs only for markdown edit tabs', () => {
