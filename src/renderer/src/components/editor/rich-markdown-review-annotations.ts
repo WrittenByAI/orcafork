@@ -264,6 +264,28 @@ export function getRichMarkdownAnnotationButtonLeft(rootWidth: number): number {
   return Math.min(preferredLeft, maxLeft)
 }
 
+// Why: a collapsed mermaid block hides its source (<pre> is display:none), so a
+// selection over that source produces no native selection rect. Anchor the
+// add-note affordance to the visible "Mermaid" chip instead, so clicking the
+// chip can add a note covering the whole diagram source.
+function getCollapsedMermaidChipRect(editor: Editor, root: HTMLElement): DOMRect | null {
+  const { from } = editor.state.selection
+  try {
+    const domAt = editor.view.domAtPos(from)
+    const start =
+      domAt.node instanceof HTMLElement ? domAt.node : (domAt.node.parentElement ?? null)
+    const wrapper = start?.closest('.rich-markdown-code-block-wrapper.is-mermaid-collapsed')
+    if (!wrapper || !root.contains(wrapper)) {
+      return null
+    }
+    const anchor = wrapper.querySelector('.mermaid-collapsed-chip') ?? wrapper
+    const rect = anchor.getBoundingClientRect()
+    return rect.width > 0 || rect.height > 0 ? rect : null
+  } catch {
+    return null
+  }
+}
+
 export function getRichMarkdownAnnotationTarget(
   editor: Editor,
   root: HTMLElement
@@ -271,7 +293,8 @@ export function getRichMarkdownAnnotationTarget(
   if (editor.state.selection.empty) {
     return null
   }
-  const rect = getCurrentRichMarkdownSelectionRect(root)
+  const rect =
+    getCurrentRichMarkdownSelectionRect(root) ?? getCollapsedMermaidChipRect(editor, root)
   if (!rect) {
     return null
   }

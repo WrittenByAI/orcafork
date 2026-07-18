@@ -1,4 +1,4 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react'
 import type { NodeViewProps } from '@tiptap/react'
@@ -162,7 +162,9 @@ const LANGUAGES = [
 
 export function RichMarkdownCodeBlock({
   node,
-  updateAttributes
+  updateAttributes,
+  editor,
+  getPos
 }: NodeViewProps): React.JSX.Element {
   useTranslation()
   const language = (node.attrs.language as string) || ''
@@ -177,6 +179,74 @@ export function RichMarkdownCodeBlock({
     (settings?.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   const isMermaid = language === 'mermaid'
+  const hasContent = node.textContent.trim().length > 0
+  // Why: a rendered mermaid block collapses its source to a compact "Mermaid"
+  // chip so the rich view isn't dominated by raw diagram code. The source stays
+  // in the document (it's the ProseMirror contentDOM) and is revealed on demand
+  // for editing. It only makes sense once there's syntax to render — an empty
+  // block stays open so the user can type the diagram.
+  const [expanded, setExpanded] = useState(false)
+  const collapsed = isMermaid && hasContent && !expanded
+
+  // Why: once expanded for editing, fold the source back into the chip as soon
+  // as the selection leaves the block, so the collapsed presentation is the
+  // resting state without the user having to explicitly close it.
+  useEffect(() => {
+    if (!isMermaid || !expanded) {
+      return
+    }
+    const foldWhenSelectionLeaves = (): void => {
+      const pos = typeof getPos === 'function' ? getPos() : undefined
+      if (typeof pos !== 'number') {
+        return
+      }
+      const { from, to } = editor.state.selection
+      // Inside the editable source means strictly between the node's open and
+      // close tokens (pos .. pos + nodeSize).
+      const insideSource = from >= pos + 1 && to <= pos + node.nodeSize - 1
+      if (!insideSource) {
+        setExpanded(false)
+      }
+    }
+    editor.on('selectionUpdate', foldWhenSelectionLeaves)
+    return () => {
+      editor.off('selectionUpdate', foldWhenSelectionLeaves)
+    }
+  }, [editor, expanded, getPos, isMermaid, node])
+
+  // Why: clicking the chip keeps the diagram collapsed but selects the whole
+  // source *text* as a plain TextSelection. That drives the review annotation
+  // "+" to target the entire diagram source (its rect falls back to the chip
+  // since the source stays hidden), so one click adds a note over the whole
+  // block. The source itself is not revealed — double-click does that.
+  const handleChipClick = useCallback(() => {
+    const pos = typeof getPos === 'function' ? getPos() : undefined
+    if (typeof pos !== 'number') {
+      return
+    }
+    const from = pos + 1
+    const to = pos + node.nodeSize - 1
+    editor.chain().focus().setTextSelection({ from, to }).run()
+  }, [editor, getPos, node])
+
+  // Double-click reveals the source and drops the cursor into it for editing.
+  // Why: the selection is placed on the next frame so React has already made
+  // the <pre> visible — ProseMirror can't render a caret into a display:none
+  // contentDOM, so setting it in the same tick would drop the cursor.
+  const handleChipReveal = useCallback(() => {
+    const pos = typeof getPos === 'function' ? getPos() : undefined
+    if (typeof pos !== 'number') {
+      return
+    }
+    setExpanded(true)
+    requestAnimationFrame(() => {
+      editor
+        .chain()
+        .focus()
+        .setTextSelection(pos + 1)
+        .run()
+    })
+  }, [editor, getPos])
 
   const clearCopiedResetTimer = useCallback((): void => {
     if (copiedResetTimerRef.current !== null) {
@@ -227,46 +297,75 @@ export function RichMarkdownCodeBlock({
   )
 
   return (
-    <NodeViewWrapper className="rich-markdown-code-block-wrapper">
-      <select
-        className="rich-markdown-code-block-lang"
-        contentEditable={false}
-        value={language}
-        onChange={onChange}
-      >
-        {LANGUAGES.map((lang) => (
-          <option key={lang.value} value={lang.value}>
-            {lang.label}
-          </option>
-        ))}
-        {/* If the document has a language not in our list, show it as-is */}
-        {language && !LANGUAGES.some((l) => l.value === language) ? (
-          <option value={language}>{language}</option>
-        ) : null}
-      </select>
-      <button
-        ref={setCopyButtonRef}
-        type="button"
-        className="code-block-copy-btn"
-        contentEditable={false}
-        onClick={handleCopy}
-        aria-label={translate(
-          'auto.components.editor.RichMarkdownCodeBlock.c72beafc0f',
-          'Copy code'
-        )}
-        title={translate('auto.components.editor.RichMarkdownCodeBlock.c72beafc0f', 'Copy code')}
-      >
-        {copied ? (
-          <>
-            <Check size={14} />
-            <span className="code-block-copy-label">
-              {translate('auto.components.editor.RichMarkdownCodeBlock.232d9ed853', 'Copied')}
-            </span>
-          </>
-        ) : (
-          <Copy size={14} />
-        )}
-      </button>
+    <NodeViewWrapper
+      className={`rich-markdown-code-block-wrapper${isMermaid ? ' is-mermaid' : ''}${
+        collapsed ? ' is-mermaid-collapsed' : ''
+      }`}
+    >
+      {collapsed ? (
+        // Why: the chip replaces the raw source in the resting state. Single
+        // click selects the whole source so a review note can target the entire
+        // diagram; double click reveals the source to edit it.
+        <div
+          className="mermaid-collapsed-chip"
+          contentEditable={false}
+          role="button"
+          tabIndex={0}
+          onClick={handleChipClick}
+          onDoubleClick={handleChipReveal}
+          title={translate(
+            'auto.components.editor.RichMarkdownCodeBlock.mermaid-chip-hint',
+            'Click to add a note, double-click to edit'
+          )}
+        >
+          {translate('auto.components.editor.RichMarkdownCodeBlock.89d6cc14fb', 'Mermaid')}
+        </div>
+      ) : (
+        <>
+          <select
+            className="rich-markdown-code-block-lang"
+            contentEditable={false}
+            value={language}
+            onChange={onChange}
+          >
+            {LANGUAGES.map((lang) => (
+              <option key={lang.value} value={lang.value}>
+                {lang.label}
+              </option>
+            ))}
+            {/* If the document has a language not in our list, show it as-is */}
+            {language && !LANGUAGES.some((l) => l.value === language) ? (
+              <option value={language}>{language}</option>
+            ) : null}
+          </select>
+          <button
+            ref={setCopyButtonRef}
+            type="button"
+            className="code-block-copy-btn"
+            contentEditable={false}
+            onClick={handleCopy}
+            aria-label={translate(
+              'auto.components.editor.RichMarkdownCodeBlock.c72beafc0f',
+              'Copy code'
+            )}
+            title={translate(
+              'auto.components.editor.RichMarkdownCodeBlock.c72beafc0f',
+              'Copy code'
+            )}
+          >
+            {copied ? (
+              <>
+                <Check size={14} />
+                <span className="code-block-copy-label">
+                  {translate('auto.components.editor.RichMarkdownCodeBlock.232d9ed853', 'Copied')}
+                </span>
+              </>
+            ) : (
+              <Copy size={14} />
+            )}
+          </button>
+        </>
+      )}
       <NodeViewContent<'pre'> as="pre" />
       {/* Why: mermaid diagrams render as a live SVG preview below the editable
           source so users can see the result while editing. The code block stays
