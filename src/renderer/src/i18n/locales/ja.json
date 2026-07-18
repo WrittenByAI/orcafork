@@ -11692,7 +11692,7 @@
           "4daed43ae3": "C++",
           "4227cf50fe": "Bash",
           "13822cdfda": "プレーンテキスト",
-          "mermaid-chip-hint": "Double-click to edit the diagram source"
+          "mermaid-chip-hint": "Click to add a note, double-click to edit"
         },
         "RichMarkdownDocLinkMenu": {
           "e17b987473": "↑↓ 移動 ↵ 選択 esc 閉じる",
