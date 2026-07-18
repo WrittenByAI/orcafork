@@ -81,26 +81,82 @@ function agent(prompt) {
   return { out, verdict }
 }
 
-function runGates() {
+// Vitest prints one ` FAIL  <file> > <suite> > <test>` line per failing test.
+function parseFailures(output) {
+  return new Set(
+    output
+      .split('\n')
+      .filter((line) => line.startsWith(' FAIL '))
+      .map((line) => line.slice(6).trim())
+  )
+}
+
+function runStep(label, cmd, args) {
+  log(`gate: ${label}`)
+  const res = run(cmd, args, { cwd: WORKTREE, check: false })
+  return { ...res, combined: `${res.out}\n${res.err}` }
+}
+
+// Why a differential test gate: some suites fail for reasons that have nothing to
+// do with the fork (host shell integration, git boundaries, cross-file state
+// pollution) and fail identically on pristine upstream. Demanding a fully green
+// run would keep the gate permanently red and block every auto-merge, so a test
+// only counts against us if it does NOT already fail on the fork before the merge.
+// The baseline is measured, not stored, so it cannot rot — and the second run is
+// only paid for when the first one is red.
+function runTestGate(branch) {
+  const merged = runStep('pnpm run test', 'pnpm', ['run', 'test'])
+  if (merged.ok) {
+    return { ok: true }
+  }
+
+  const mergedFailures = parseFailures(merged.combined)
+  log(`${mergedFailures.size} failing test(s) — measuring the pre-merge baseline`)
+  git(['switch', '--detach', `${FORK}/${FORK_BRANCH}`], { cwd: WORKTREE })
+  run('pnpm', ['install', '--prefer-offline', '--frozen-lockfile'], { cwd: WORKTREE, check: false })
+  const baseline = runStep('pnpm run test (baseline)', 'pnpm', ['run', 'test'])
+  const baselineFailures = parseFailures(baseline.combined)
+  git(['switch', branch], { cwd: WORKTREE })
+  run('pnpm', ['install', '--prefer-offline', '--frozen-lockfile'], { cwd: WORKTREE, check: false })
+
+  const regressions = [...mergedFailures].filter((f) => !baselineFailures.has(f))
+  if (regressions.length === 0) {
+    log(`all ${mergedFailures.size} failure(s) already fail pre-merge — not a regression`)
+    return { ok: true, preExisting: mergedFailures.size }
+  }
+  return {
+    ok: false,
+    failed: 'pnpm run test',
+    output: `${regressions.length} test(s) fail after the merge but pass before it:\n\n${regressions.join('\n')}`
+  }
+}
+
+function runGates(branch) {
   if (SKIP_GATES) {
     log('gates skipped (--skip-gates)')
     return { ok: true }
   }
-  const gates = [
+  for (const [cmd, args] of [
     ['pnpm', ['install', '--prefer-offline', '--frozen-lockfile']],
-    ['pnpm', ['run', 'typecheck']],
-    ['pnpm', ['run', 'test']],
-    ['pnpm', ['run', 'lint']]
-  ]
-  for (const [cmd, args] of gates) {
+    ['pnpm', ['run', 'typecheck']]
+  ]) {
     const label = `${cmd} ${args.join(' ')}`
-    log(`gate: ${label}`)
-    const res = run(cmd, args, { cwd: WORKTREE, check: false })
+    const res = runStep(label, cmd, args)
     if (!res.ok) {
-      return { ok: false, failed: label, output: `${res.out}\n${res.err}`.slice(-6000) }
+      return { ok: false, failed: label, output: res.combined.slice(-6000) }
     }
   }
-  return { ok: true }
+
+  const tests = runTestGate(branch)
+  if (!tests.ok) {
+    return tests
+  }
+
+  const lint = runStep('pnpm run lint', 'pnpm', ['run', 'lint'])
+  if (!lint.ok) {
+    return { ok: false, failed: 'pnpm run lint', output: lint.combined.slice(-6000) }
+  }
+  return { ok: true, preExisting: tests.preExisting }
 }
 
 function publish(branch, title, body, { autoMerge }) {
@@ -271,7 +327,7 @@ function handleClean({ branch, short, stamp, overlap, newCommits }) {
     cwd: WORKTREE
   })
 
-  const gates = runGates()
+  const gates = runGates(branch)
   if (!gates.ok) {
     const body =
       `Upstream \`${short}\` merged cleanly, but **${gates.failed} failed**.\n\n` +
@@ -281,12 +337,15 @@ function handleClean({ branch, short, stamp, overlap, newCommits }) {
     publish(branch, `Sync upstream ${short} (gates failed)`, body, { autoMerge: false })
     return
   }
+  const gateNote = gates.preExisting
+    ? `\n\n${gates.preExisting} test(s) fail, but fail identically before the merge — not a regression.`
+    : ''
 
   // A clean merge that compiles can still be wrong: upstream may have renamed a
   // symbol or changed a contract the fork depends on. This is the part git and
   // the gates cannot answer.
   if (overlap.length === 0) {
-    const body = `Upstream \`${short}\` merged cleanly, gates green, and upstream touched none of the fork's files.`
+    const body = `Upstream \`${short}\` merged cleanly, gates green, and upstream touched none of the fork's files.${gateNote}`
     publish(branch, `Sync upstream ${short}`, body, { autoMerge: true })
     return
   }
