@@ -9571,7 +9571,9 @@
               "a9bf7c171a": "Push fallido",
               "834cb3f23d": "Corregir con AI",
               "783a808870": "Cerrar"
-            }
+            },
+            "5c951f3e68": "Canvas",
+            "897d7c622d": "Canvas"
           },
           "SourceControlAgentActionDialog": {
             "8e856842d1": "No se pudo iniciar el agente seleccionado.",
@@ -11508,7 +11510,8 @@
           "f0fd4174b5": "Abre la pestaña de archivo para usar la edición enriquecida de Markdown",
           "a10d9b8337": "Abrir archivo",
           "2076ecfc9c": "Cambio anterior",
-          "631dab0df3": "Cambio siguiente"
+          "631dab0df3": "Cambio siguiente",
+          "e2e42b36fd": "Canvas"
         },
         "EditorPanelMarkdownActionsMenu": {
           "3e0ce48c24": "Exportar como PDF",
@@ -11688,7 +11691,8 @@
           "026653f21f": "CSS",
           "4daed43ae3": "C++",
           "4227cf50fe": "Bash",
-          "13822cdfda": "Texto sin formato"
+          "13822cdfda": "Texto sin formato",
+          "mermaid-chip-hint": "Double-click to edit the diagram source"
         },
         "RichMarkdownDocLinkMenu": {
           "e17b987473": "↑↓ navegar  ↵ seleccionar  esc descartar",
@@ -11971,6 +11975,38 @@
         },
         "richMarkdownSourceOwningCutFeedback": {
           "selectLessContent": "Selecciona menos contenido o usa el modo de código para cortar citas HTML conservadas."
+        },
+        "TldrawIssueDialog": {
+          "f3a9c1d8e0": "Canvas: {{value0}}",
+          "b7e2f4a610": "Opened issue #{{value0}}",
+          "c14d8b9f22": "View",
+          "a45e0c7b31": "Create GitHub issue from selection",
+          "d92f1a6c43": "Files an issue with a screenshot of the selected shapes attached.",
+          "e01b7d5f94": "No selection to capture",
+          "f68a2e4c05": "Title",
+          "a3c9f0b716": "Short summary",
+          "b0d4e6a827": "Description (optional)",
+          "c2f5a7b938": "What's going on?",
+          "d3a6b8c049": "Create without screenshot",
+          "e4b7c9d150": "Cancel",
+          "f5c8d0e261": "Creating…",
+          "a6d9e1f372": "Create issue"
+        },
+        "TldrawSelectionOverlay": {
+          "2527661029": "Note added — send it from the notes rail or header menu.",
+          "794fe9e3f0": "Add note",
+          "399114e333": "Create issue",
+          "195675b721": "Note on selected shapes"
+        },
+        "TldrawViewer": {
+          "83f281100a": "Could not parse .tldr file — switch to Source view"
+        },
+        "tldraw": {
+          "issue": {
+            "image": {
+              "a1b46be31d": "Could not find the repository for this canvas file."
+            }
+          }
         }
       },
       "diff": {

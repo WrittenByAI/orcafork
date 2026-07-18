@@ -9571,7 +9571,9 @@
               "a9bf7c171a": "푸시 실패",
               "834cb3f23d": "AI로 수정",
               "783a808870": "닫기"
-            }
+            },
+            "5c951f3e68": "Canvas",
+            "897d7c622d": "Canvas"
           },
           "SourceControlAgentActionDialog": {
             "8e856842d1": "선택한 agent를 시작할 수 없습니다.",
@@ -11508,7 +11510,8 @@
           "f0fd4174b5": "풍부한 markdown 편집을 사용하려면 파일 탭을 엽니다.",
           "a10d9b8337": "파일 열기",
           "2076ecfc9c": "이전 변경",
-          "631dab0df3": "다음 변경"
+          "631dab0df3": "다음 변경",
+          "e2e42b36fd": "Canvas"
         },
         "EditorPanelMarkdownActionsMenu": {
           "3e0ce48c24": "PDF로 내보내기",
@@ -11688,7 +11691,8 @@
           "026653f21f": "CSS",
           "4daed43ae3": "C++",
           "4227cf50fe": "Bash",
-          "13822cdfda": "일반 텍스트"
+          "13822cdfda": "일반 텍스트",
+          "mermaid-chip-hint": "Double-click to edit the diagram source"
         },
         "RichMarkdownDocLinkMenu": {
           "e17b987473": "↑↓ 탐색  ↵ 선택  esc 해제",
@@ -11971,6 +11975,38 @@
         },
         "richMarkdownSourceOwningCutFeedback": {
           "selectLessContent": "보존된 HTML 인용을 잘라내려면 더 적은 콘텐츠를 선택하거나 코드 모드를 사용하세요."
+        },
+        "TldrawIssueDialog": {
+          "f3a9c1d8e0": "Canvas: {{value0}}",
+          "b7e2f4a610": "Opened issue #{{value0}}",
+          "c14d8b9f22": "View",
+          "a45e0c7b31": "Create GitHub issue from selection",
+          "d92f1a6c43": "Files an issue with a screenshot of the selected shapes attached.",
+          "e01b7d5f94": "No selection to capture",
+          "f68a2e4c05": "Title",
+          "a3c9f0b716": "Short summary",
+          "b0d4e6a827": "Description (optional)",
+          "c2f5a7b938": "What's going on?",
+          "d3a6b8c049": "Create without screenshot",
+          "e4b7c9d150": "Cancel",
+          "f5c8d0e261": "Creating…",
+          "a6d9e1f372": "Create issue"
+        },
+        "TldrawSelectionOverlay": {
+          "2527661029": "Note added — send it from the notes rail or header menu.",
+          "794fe9e3f0": "Add note",
+          "399114e333": "Create issue",
+          "195675b721": "Note on selected shapes"
+        },
+        "TldrawViewer": {
+          "83f281100a": "Could not parse .tldr file — switch to Source view"
+        },
+        "tldraw": {
+          "issue": {
+            "image": {
+              "a1b46be31d": "Could not find the repository for this canvas file."
+            }
+          }
         }
       },
       "diff": {

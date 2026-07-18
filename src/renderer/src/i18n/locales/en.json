@@ -9571,7 +9571,9 @@
               "a9bf7c171a": "Push Failed",
               "834cb3f23d": "Fix with AI",
               "783a808870": "Close"
-            }
+            },
+            "5c951f3e68": "Canvas",
+            "897d7c622d": "Canvas"
           },
           "SourceControlAgentActionDialog": {
             "8e856842d1": "Could not start the selected agent.",
@@ -11508,7 +11510,8 @@
           "f0fd4174b5": "Open file tab to use rich markdown editing",
           "a10d9b8337": "Open file",
           "2076ecfc9c": "Previous change",
-          "631dab0df3": "Next change"
+          "631dab0df3": "Next change",
+          "e2e42b36fd": "Canvas"
         },
         "EditorPanelMarkdownActionsMenu": {
           "3e0ce48c24": "Export as PDF",
@@ -11663,6 +11666,7 @@
           "6f2f3a6001": "Add review note"
         },
         "RichMarkdownCodeBlock": {
+          "mermaid-chip-hint": "Click to add a note, double-click to edit",
           "232d9ed853": "Copied",
           "c72beafc0f": "Copy code",
           "74eab1d9b2": "YAML",
@@ -11971,6 +11975,38 @@
         },
         "richMarkdownSourceOwningCutFeedback": {
           "selectLessContent": "Select less content or use code mode to cut preserved HTML citations."
+        },
+        "TldrawIssueDialog": {
+          "f3a9c1d8e0": "Canvas: {{value0}}",
+          "b7e2f4a610": "Opened issue #{{value0}}",
+          "c14d8b9f22": "View",
+          "a45e0c7b31": "Create GitHub issue from selection",
+          "d92f1a6c43": "Files an issue with a screenshot of the selected shapes attached.",
+          "e01b7d5f94": "No selection to capture",
+          "f68a2e4c05": "Title",
+          "a3c9f0b716": "Short summary",
+          "b0d4e6a827": "Description (optional)",
+          "c2f5a7b938": "What's going on?",
+          "d3a6b8c049": "Create without screenshot",
+          "e4b7c9d150": "Cancel",
+          "f5c8d0e261": "Creating…",
+          "a6d9e1f372": "Create issue"
+        },
+        "TldrawSelectionOverlay": {
+          "2527661029": "Note added — send it from the notes rail or header menu.",
+          "794fe9e3f0": "Add note",
+          "399114e333": "Create issue",
+          "195675b721": "Note on selected shapes"
+        },
+        "TldrawViewer": {
+          "83f281100a": "Could not parse .tldr file — switch to Source view"
+        },
+        "tldraw": {
+          "issue": {
+            "image": {
+              "a1b46be31d": "Could not find the repository for this canvas file."
+            }
+          }
         }
       },
       "diff": {
