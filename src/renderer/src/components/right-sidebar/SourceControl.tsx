@@ -5186,6 +5186,24 @@ function SourceControlInner(): React.JSX.Element {
         })
         return
       }
+      if (getDiffCommentSource(comment) === 'canvas') {
+        // Why: canvas notes are scoped to a tldraw shape selection, not a
+        // text line, so there is nothing to reveal — just open the .tldr
+        // file in its rich (canvas) view.
+        const absPath = joinPath(worktreePath, filePath)
+        const language = detectLanguage(filePath)
+        setEditorViewMode(absPath, 'edit')
+        setMarkdownViewMode(absPath, 'rich')
+        openFile({
+          filePath: absPath,
+          relativePath: filePath,
+          worktreeId: activeWorktreeId,
+          language,
+          mode: 'edit'
+        })
+        setPendingEditorReveal(null)
+        return
+      }
       const matches = entries.filter((e) => e.path === filePath)
       const uncommitted =
         matches.find((e) => e.area === 'unstaged') ??
@@ -7316,8 +7334,11 @@ function SectionHeader({
 }
 
 function getLocalizedDiffCommentLineLabel(
-  comment: Pick<DiffComment, 'lineNumber' | 'startLine'>
+  comment: Pick<DiffComment, 'lineNumber' | 'source' | 'startLine'>
 ): string {
+  if (getDiffCommentSource(comment) === 'canvas') {
+    return translate('auto.components.right.sidebar.SourceControl.5c951f3e68', 'Canvas')
+  }
   if (comment.startLine !== undefined && comment.startLine !== comment.lineNumber) {
     return translate(
       'auto.components.right.sidebar.SourceControl.d97ef8f221',
@@ -7479,7 +7500,15 @@ function DiffCommentsInlineList({
                   <span className="shrink-0 rounded bg-muted/70 px-1 py-0.5 text-[10px] leading-none text-muted-foreground">
                     {getDiffCommentSource(c) === 'markdown'
                       ? translate('auto.components.right.sidebar.SourceControl.94c42b252e', 'MD')
-                      : translate('auto.components.right.sidebar.SourceControl.c56ba7fa06', 'Diff')}
+                      : getDiffCommentSource(c) === 'canvas'
+                        ? translate(
+                            'auto.components.right.sidebar.SourceControl.897d7c622d',
+                            'Canvas'
+                          )
+                        : translate(
+                            'auto.components.right.sidebar.SourceControl.c56ba7fa06',
+                            'Diff'
+                          )}
                   </span>
                   {c.sentAt ? (
                     <span className="shrink-0 rounded bg-muted/70 px-1 py-0.5 text-[10px] leading-none text-muted-foreground">

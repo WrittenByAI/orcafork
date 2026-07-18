@@ -3,6 +3,7 @@ import type { DiffComment } from '../../../shared/types'
 import {
   getDiffCommentLineLabel,
   getDiffCommentSource,
+  isCanvasComment,
   isDiffComment,
   isMarkdownComment
 } from './diff-comment-compat'
@@ -39,5 +40,19 @@ describe('diff comment compatibility helpers', () => {
     const comment = makeComment({ startLine: 2, lineNumber: 4 })
     expect(getDiffCommentLineLabel(comment)).toBe('Lines 2-4')
     expect(getDiffCommentLineLabel(comment, true)).toBe('L2-L4')
+  })
+
+  it('routes canvas comments by explicit source, out of diff and markdown', () => {
+    const comment = makeComment({ source: 'canvas', lineNumber: 0 })
+    expect(getDiffCommentSource(comment)).toBe('canvas')
+    expect(isCanvasComment(comment)).toBe(true)
+    expect(isDiffComment(comment)).toBe(false)
+    expect(isMarkdownComment(comment)).toBe(false)
+  })
+
+  it('labels canvas comments as "Canvas" instead of a line number, compact or not', () => {
+    const comment = makeComment({ source: 'canvas', lineNumber: 0 })
+    expect(getDiffCommentLineLabel(comment)).toBe('Canvas')
+    expect(getDiffCommentLineLabel(comment, true)).toBe('Canvas')
   })
 })

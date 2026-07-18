@@ -56,6 +56,40 @@ describe('formatDiffComment', () => {
     )
   })
 
+  it('formats canvas notes with a Shapes line instead of Line/Lines/Scope', () => {
+    const out = formatDiffComment(
+      makeComment({
+        source: 'canvas',
+        filePath: 'canvases/board.tldr',
+        lineNumber: 0,
+        selectedText: '2 rectangles, 1 arrow',
+        body: 'tighten this layout'
+      })
+    )
+    expect(out).toBe(
+      [
+        'File: canvases/board.tldr',
+        'Source: canvas',
+        'Shapes: 2 rectangles, 1 arrow',
+        'User comment: "tighten this layout"'
+      ].join('\n')
+    )
+  })
+
+  it('falls back to an empty Shapes line when a canvas note has no selectedText', () => {
+    const out = formatDiffComment(
+      makeComment({ source: 'canvas', filePath: 'canvases/board.tldr', lineNumber: 0 })
+    )
+    expect(out).toBe(
+      [
+        'File: canvases/board.tldr',
+        'Source: canvas',
+        'Shapes: ',
+        'User comment: "Needs validation"'
+      ].join('\n')
+    )
+  })
+
   it('escapes embedded quotes in the body', () => {
     const out = formatDiffComment(makeComment({ body: 'why "this" path?' }))
     expect(out).toContain('User comment: "why \\"this\\" path?"')

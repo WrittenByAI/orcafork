@@ -282,6 +282,48 @@ describe('addDiffComment', () => {
       }
     })
   })
+
+  // Why: normalizeDiffComment used to only whitelist 'markdown' | 'diff' and
+  // silently strip any other source, which would degrade a canvas note back
+  // into a legacy diff note on the very first persist round-trip (and make
+  // it start showing up in DiffViewer/DiffSectionItem). Guard this
+  // regression explicitly.
+  it('persists source: canvas without stripping it to a legacy diff note', async () => {
+    const store = createTestStore()
+    seed(store, [])
+
+    const saved = await store.getState().addDiffComment({
+      worktreeId: WT,
+      filePath: 'canvases/board.tldr',
+      source: 'canvas',
+      lineNumber: 0,
+      selectedText: '3 shapes: 2 rectangles, 1 arrow',
+      body: 'canvas note',
+      side: 'modified'
+    })
+
+    expect(saved).toEqual(
+      expect.objectContaining({
+        filePath: 'canvases/board.tldr',
+        source: 'canvas',
+        lineNumber: 0,
+        selectedText: '3 shapes: 2 rectangles, 1 arrow',
+        body: 'canvas note'
+      })
+    )
+    expect(updateMeta).toHaveBeenCalledWith({
+      worktreeId: WT,
+      updates: {
+        diffComments: [
+          expect.objectContaining({
+            source: 'canvas',
+            lineNumber: 0,
+            selectedText: '3 shapes: 2 rectangles, 1 arrow'
+          })
+        ]
+      }
+    })
+  })
 })
 
 describe('updateDiffComment', () => {

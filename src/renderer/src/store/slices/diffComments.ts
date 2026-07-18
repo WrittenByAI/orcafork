@@ -39,7 +39,10 @@ function generateId(): string {
 
 function normalizeDiffComment(comment: DiffComment): DiffComment {
   const rawSource = (comment as { source?: unknown }).source
-  const source = rawSource === 'markdown' || rawSource === 'diff' ? rawSource : undefined
+  const source =
+    rawSource === 'markdown' || rawSource === 'diff' || rawSource === 'canvas'
+      ? rawSource
+      : undefined
   const rawStartLine = (comment as { startLine?: unknown }).startLine
   const startLine =
     Number.isInteger(rawStartLine) &&
