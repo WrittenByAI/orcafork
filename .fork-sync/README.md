@@ -51,6 +51,17 @@ the fork deliberately adds and why. **Keep that section current**: it is the onl
 thing standing between an agent and a plausible-looking resolution that quietly
 discards a fork behaviour.
 
+## Node version
+
+The gates run under **node 24** (`package.json` engines), pinned explicitly in the
+systemd unit via `mise x node@24`. This is not cosmetic: on node 26 about 40 unit
+tests fail with `window.localStorage` undefined — unrelated to any fork change
+(they fail identically on the pristine fork base), but enough to keep the test gate
+permanently red and block every auto-merge.
+
+If your own shell defaults to node 26, `pnpm test` will fail locally for the same
+reason. Run it as `mise x node@24 -- pnpm test`, or pin the repo.
+
 ## Cadence
 
 Daily. Upstream moves fast, and small diffs conflict far less than large ones.
