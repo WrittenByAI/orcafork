@@ -44,6 +44,7 @@ import {
 import { isGitRepoKind } from '../../../../shared/repo-kind'
 import { sanitizeRepoIcon } from '../../../../shared/repo-icon'
 import { normalizeRepoBadgeColor } from '../../../../shared/repo-badge-color'
+import { applyManualRepoOrder, getManualRepoOrder } from '../../../../shared/manual-repo-order'
 import { getProjectGroupSubtreeIds } from '../../../../shared/project-groups'
 import { isPathInsideOrEqual } from '../../../../shared/cross-platform-path'
 import { getRepoIdFromWorktreeId } from '../../../../shared/worktree-id'
@@ -84,6 +85,7 @@ import {
   toSshExecutionHostId,
   type ExecutionHostId
 } from '../../../../shared/execution-host'
+import { isRemovedRuntimeHostId } from './stale-runtime-host-rows'
 import { cleanupEphemeralVmRuntimesForDeleted } from '@/lib/ephemeral-vm-runtime-cleanup'
 import { folderWorkspaceKey, parseWorkspaceKey } from '../../../../shared/workspace-scope'
 import { formatFolderWorkspaceCreateError } from '../../lib/folder-workspace-path-status'
@@ -1561,13 +1563,20 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
       }
       let finalizedHostRepos: Repo[] = []
       set((s) => {
+        // Why: an in-flight fetch for a just-removed runtime env would otherwise
+        // re-add purged repos/rows and stick — nothing re-triggers the purge. Skip
+        // only when the catalog's env was actually removed (tombstoned), not merely
+        // absent from the not-yet-hydrated saved list (#8881).
+        if (isRemovedRuntimeHostId(catalog.hostId, s.removedRuntimeEnvironmentIds)) {
+          return s
+        }
         // Why: after re-adoption re-points a repo onto a re-added SSH target, the
         // per-host merge leaves the stale row on the old (removed) target id — a
         // ghost a terminal pane can bind to and fail with "SSH target not found".
         // Drop rows on unknown SSH targets that a live-host sibling supersedes.
         const result = mergeFetchedRepoCatalog(catalog, s.repos)
         const reconciliation = reconcileSupersededSshRepos(result.repos, s)
-        const prunedRepos = reconciliation.repos
+        const prunedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
         const validRepoIds = new Set(prunedRepos.map((repo) => repo.id))
         const projectCompatibility = projectCompatibilityForReconciledRepos(
           prunedRepos,
@@ -1615,9 +1624,14 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
       const catalog = await fetchRepoCatalogForTarget(target)
       let finalizedHostRepos: Repo[] = []
       set((s) => {
+        // Why: skip a merge for a runtime env removed while this Connect-flow fetch
+        // was in flight, so purged repos/rows are not re-added (#8881).
+        if (isRemovedRuntimeHostId(catalog.hostId, s.removedRuntimeEnvironmentIds)) {
+          return s
+        }
         const result = mergeFetchedRepoCatalog(catalog, s.repos)
         const reconciliation = reconcileSupersededSshRepos(result.repos, s)
-        const finalizedRepos = reconciliation.repos
+        const finalizedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
         const validRepoIds = new Set(finalizedRepos.map((repo) => repo.id))
         const projectCompatibility = projectCompatibilityForReconciledRepos(
           finalizedRepos,
@@ -1681,9 +1695,15 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
       }
       let hostRepos: Repo[] = []
       set((s) => {
+        // Why: an all-host refresh can still be merging a host removed mid-load;
+        // skip a catalog whose env was tombstoned by a removal, not one merely
+        // absent from the not-yet-hydrated saved list (#8881).
+        if (isRemovedRuntimeHostId(catalog.hostId, s.removedRuntimeEnvironmentIds)) {
+          return s
+        }
         const result = mergeFetchedRepoCatalog(catalog, s.repos)
         const reconciliation = reconcileSupersededSshRepos(result.repos, s)
-        const finalizedRepos = reconciliation.repos
+        const finalizedRepos = applyManualRepoOrder(reconciliation.repos, s.manualRepoOrder)
         const projectCompatibility = projectCompatibilityForReconciledRepos(
           finalizedRepos,
           catalog.projectHostSetupCompatibility
@@ -3122,8 +3142,10 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
       // Caller passed a non-permutation — refuse to apply locally.
       return
     }
+    const manualRepoOrder = getManualRepoOrder(next)
     set({
       repos: next,
+      manualRepoOrder,
       folderWorkspacePathStatuses: {}
     })
     try {
@@ -3131,23 +3153,31 @@ export const createRepoSlice: StateCreator<AppState, [], [], RepoSlice> = (set, 
       // so split the cross-host order into per-host permutations and dispatch one
       // reorder per owner host.
       const groups = splitRepoReorderByHost(orderedIds, next, get().settings)
-      const results = await Promise.all(
-        groups.map(async (group) => {
-          const parsed = parseExecutionHostId(group.hostId)
-          const target =
-            parsed?.kind === 'runtime'
-              ? ({ kind: 'environment', environmentId: parsed.environmentId } as const)
-              : ({ kind: 'local' } as const)
-          return target.kind === 'local'
-            ? window.api.repos.reorder({ orderedIds: group.orderedIds })
-            : callRuntimeRpc<{ status: 'applied' | 'rejected' }>(
-                target,
-                'repo.reorder',
-                { orderedIds: group.orderedIds },
-                { timeoutMs: 15_000 }
-              )
-        })
-      )
+      const [results] = await Promise.all([
+        Promise.all(
+          groups.map(async (group) => {
+            const parsed = parseExecutionHostId(group.hostId)
+            const target =
+              parsed?.kind === 'runtime'
+                ? ({ kind: 'environment', environmentId: parsed.environmentId } as const)
+                : ({ kind: 'local' } as const)
+            return target.kind === 'local'
+              ? window.api.repos.reorderForHost({
+                  hostId: group.hostId,
+                  orderedIds: group.orderedIds
+                })
+              : callRuntimeRpc<{ status: 'applied' | 'rejected' }>(
+                  target,
+                  'repo.reorder',
+                  { orderedIds: group.orderedIds },
+                  { timeoutMs: 15_000 }
+                )
+          })
+        ),
+        // Why: servers can only persist their local permutations. The desktop
+        // profile owns the cross-host relationships needed after a cold load.
+        window.api.ui.set({ manualRepoOrder })
+      ])
       if (results.some((result) => result.status === 'rejected')) {
         await get().fetchReposForAllHosts()
       }

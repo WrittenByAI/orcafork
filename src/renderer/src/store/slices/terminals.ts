@@ -49,6 +49,7 @@ import { forgetAgentHibernationTabOutput } from '@/lib/agent-hibernation-output-
 import { forgetForegroundTerminalTabs } from '@/lib/foreground-terminal-tabs'
 import { forgetAgentStartupDeliveriesForTabs } from '@/lib/agent-startup-delivery-guards'
 import { clearTransientTerminalState, emptyLayoutSnapshot } from './terminal-helpers'
+import { pushClosedTerminalTabSnapshot, pushRecentlyClosedTabKind } from './recently-closed-tabs'
 import { isClaudeAgent } from '@/lib/agent-status'
 import { classifyTitleActivity } from '@/lib/pane-agent-evidence'
 import { buildOrphanTerminalCleanupPatch, getOrphanTerminalIds } from './terminal-orphan-helpers'
@@ -608,6 +609,7 @@ export type TerminalSlice = {
     opts?: {
       recordInteraction?: boolean
       reason?: TerminalTabCloseReason
+      captureRecentlyClosed?: boolean
       remoteCloseOwnedByHost?: boolean
       localPtyTeardownOwnedExternally?: boolean
       precomputedRetirementPlan?: TerminalTabRetirementPlan
@@ -646,7 +648,7 @@ export type TerminalSlice = {
     opts?: { recordInteraction?: boolean }
   ) => void
   setTabColor: (tabId: string, color: string | null) => void
-  updateTabPtyId: (tabId: string, ptyId: string) => void
+  updateTabPtyId: (tabId: string, ptyId: string, replacedPtyId?: string) => void
   clearTabPtyId: (tabId: string, ptyId?: string) => void
   shutdownWorktreeTerminals: (
     worktreeId: string,
@@ -1274,17 +1276,39 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
 
     set((s) => {
       const next = { ...s.tabsByWorktree }
+      let closedTab: TerminalTab | null = null
+      let closedWorktreeId: string | null = null
       for (const wId of Object.keys(next)) {
         const before = next[wId]
-        const closingTab = before.find((t) => t.id === tabId)
-        if (closingTab) {
+        const closing = before.find((t) => t.id === tabId)
+        if (closing) {
           closingWorktreeId = wId
+          // Why: capture the first-matched tab's snapshot for the Cmd+Shift+T
+          // reopen stack (see capturedSnapshot below).
+          if (!closedTab) {
+            closedTab = closing
+            closedWorktreeId = wId
+          }
         }
         const after = before.filter((t) => t.id !== tabId)
         if (after.length !== before.length) {
           next[wId] = after
         }
       }
+      // Why: only explicit user closes feed the Cmd+Shift+T reopen stack.
+      // Cleanup and PTY-exit closes must not pollute user undo history.
+      const capturedSnapshot =
+        closeReason === 'user' &&
+        opts?.captureRecentlyClosed !== false &&
+        closedTab &&
+        closedWorktreeId
+          ? {
+              ...(closedTab.startupCwd ? { startupCwd: closedTab.startupCwd } : {}),
+              ...(closedTab.shellOverride ? { shellOverride: closedTab.shellOverride } : {}),
+              ...(closedTab.customTitle ? { customTitle: closedTab.customTitle } : {}),
+              ...(closedTab.color ? { color: closedTab.color } : {})
+            }
+          : null
       const nextExpanded = { ...s.expandedPaneByTabId }
       delete nextExpanded[tabId]
       const nextCanExpand = { ...s.canExpandPaneByTabId }
@@ -1438,7 +1462,21 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         cacheTimerByKey: nextCacheTimer,
         tabBarOrderByWorktree: nextTabBarOrderByWorktree,
         pendingSnapshotByPtyId: nextSnapshots,
-        pendingColdRestoreByPtyId: nextColdRestores
+        pendingColdRestoreByPtyId: nextColdRestores,
+        ...(capturedSnapshot && closedWorktreeId
+          ? {
+              recentlyClosedTerminalTabsByWorktree: pushClosedTerminalTabSnapshot(
+                s.recentlyClosedTerminalTabsByWorktree,
+                closedWorktreeId,
+                capturedSnapshot
+              ),
+              recentlyClosedTabKindsByWorktree: pushRecentlyClosedTabKind(
+                s.recentlyClosedTabKindsByWorktree,
+                closedWorktreeId,
+                'terminal'
+              )
+            }
+          : {})
       }
     })
     // Why: sweep live AND retained agent-status entries for this tab — closing
@@ -1962,7 +2000,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
     }
   },
 
-  updateTabPtyId: (tabId, ptyId) => {
+  updateTabPtyId: (tabId, ptyId, replacedPtyId) => {
     // Why: async spawn owners must perform provider teardown themselves, but
     // this final guard prevents any late caller from recreating retired tab maps.
     if (!isTerminalTabPresent(get(), tabId)) {
@@ -1978,8 +2016,13 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       const hasLegacyPtyBinding = legacyRemotePtyId
         ? existingPtyIds.includes(legacyRemotePtyId)
         : false
-      const nextPtyIds = hasLegacyPtyBinding
-        ? [...new Set(existingPtyIds.map((id) => (id === legacyRemotePtyId ? ptyId : id)))]
+      const explicitReplacementPtyId = replacedPtyId !== ptyId ? replacedPtyId : undefined
+      const replacementPtyId =
+        explicitReplacementPtyId ?? (hasLegacyPtyBinding ? legacyRemotePtyId : null)
+      const boundReplacementPtyId =
+        replacementPtyId && existingPtyIds.includes(replacementPtyId) ? replacementPtyId : null
+      const nextPtyIds = boundReplacementPtyId
+        ? [...new Set(existingPtyIds.map((id) => (id === boundReplacementPtyId ? ptyId : id)))]
         : existingPtyIds.includes(ptyId)
           ? existingPtyIds
           : [...existingPtyIds, ptyId]
@@ -2003,7 +2046,7 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
         // paths. In split panes, later pane spawns must not steal that
         // primary binding from the original pane or remount/close flows can
         // reattach the tab to the wrong PTY and appear to "reset" panes.
-        const currentTabPtyId = tab.ptyId === legacyRemotePtyId ? ptyId : tab.ptyId
+        const currentTabPtyId = tab.ptyId === replacementPtyId ? ptyId : tab.ptyId
         const nextTabPtyId = currentTabPtyId ?? nextPtyIds[0] ?? null
         const nextPendingActivationSpawn = consumePendingActivationSpawn(tab.pendingActivationSpawn)
         if (tab.pendingActivationSpawn || tab.ptyId !== nextTabPtyId) {
@@ -2028,46 +2071,56 @@ export const createTerminalSlice: StateCreator<AppState, [], [], TerminalSlice> 
       const isFirstPty = existingPtyIds.length === 0
       const isActiveWorktree = worktreeId != null && s.activeWorktreeId === worktreeId
       const shouldBumpSortEpoch = isFirstPty && isActiveWorktree && !wasActivationSpawn
+      const shouldRetainSuppressedExit = Boolean(
+        explicitReplacementPtyId &&
+        (s.suppressedPtyExitIds[ptyId] ||
+          (replacementPtyId && s.suppressedPtyExitIds[replacementPtyId]))
+      )
       const nextSuppressedPtyExitIds = { ...s.suppressedPtyExitIds }
       delete nextSuppressedPtyExitIds[ptyId]
-      if (legacyRemotePtyId) {
-        delete nextSuppressedPtyExitIds[legacyRemotePtyId]
+      if (replacementPtyId) {
+        delete nextSuppressedPtyExitIds[replacementPtyId]
       }
-      const hasLegacyPendingRestart = legacyRemotePtyId
-        ? legacyRemotePtyId in s.pendingCodexPaneRestartIds
+      if (shouldRetainSuppressedExit) {
+        // Why: explicit handle rotation preserves the same terminal lifecycle;
+        // an intentional exit racing the rotation must stay suppressed once.
+        nextSuppressedPtyExitIds[ptyId] = true
+      }
+      const hasReplacementPendingRestart = replacementPtyId
+        ? replacementPtyId in s.pendingCodexPaneRestartIds
         : false
-      const hasLegacyRestartNotice = legacyRemotePtyId
-        ? legacyRemotePtyId in s.codexRestartNoticeByPtyId
+      const hasReplacementRestartNotice = replacementPtyId
+        ? replacementPtyId in s.codexRestartNoticeByPtyId
         : false
-      const hasLegacyMigrationUnsupported = legacyRemotePtyId
-        ? legacyRemotePtyId in s.migrationUnsupportedByPtyId
+      const hasReplacementMigrationUnsupported = replacementPtyId
+        ? replacementPtyId in s.migrationUnsupportedByPtyId
         : false
-      const nextPendingCodexPaneRestartIds = hasLegacyPendingRestart
+      const nextPendingCodexPaneRestartIds = hasReplacementPendingRestart
         ? { ...s.pendingCodexPaneRestartIds }
         : s.pendingCodexPaneRestartIds
-      const nextCodexRestartNoticeByPtyId = hasLegacyRestartNotice
+      const nextCodexRestartNoticeByPtyId = hasReplacementRestartNotice
         ? { ...s.codexRestartNoticeByPtyId }
         : s.codexRestartNoticeByPtyId
-      const nextMigrationUnsupportedByPtyId = hasLegacyMigrationUnsupported
+      const nextMigrationUnsupportedByPtyId = hasReplacementMigrationUnsupported
         ? { ...s.migrationUnsupportedByPtyId }
         : s.migrationUnsupportedByPtyId
-      if (legacyRemotePtyId) {
-        if (hasLegacyPendingRestart) {
+      if (replacementPtyId) {
+        if (hasReplacementPendingRestart) {
           nextPendingCodexPaneRestartIds[ptyId] = true
-          delete nextPendingCodexPaneRestartIds[legacyRemotePtyId]
+          delete nextPendingCodexPaneRestartIds[replacementPtyId]
         }
-        if (hasLegacyRestartNotice) {
-          const legacyNotice = nextCodexRestartNoticeByPtyId[legacyRemotePtyId]
-          nextCodexRestartNoticeByPtyId[ptyId] ??= legacyNotice
-          delete nextCodexRestartNoticeByPtyId[legacyRemotePtyId]
+        if (hasReplacementRestartNotice) {
+          const replacedNotice = nextCodexRestartNoticeByPtyId[replacementPtyId]
+          nextCodexRestartNoticeByPtyId[ptyId] ??= replacedNotice
+          delete nextCodexRestartNoticeByPtyId[replacementPtyId]
         }
-        if (hasLegacyMigrationUnsupported) {
-          const legacyMigrationUnsupported = nextMigrationUnsupportedByPtyId[legacyRemotePtyId]
+        if (hasReplacementMigrationUnsupported) {
+          const replacedMigrationUnsupported = nextMigrationUnsupportedByPtyId[replacementPtyId]
           nextMigrationUnsupportedByPtyId[ptyId] ??= {
-            ...legacyMigrationUnsupported,
+            ...replacedMigrationUnsupported,
             ptyId
           }
-          delete nextMigrationUnsupportedByPtyId[legacyRemotePtyId]
+          delete nextMigrationUnsupportedByPtyId[replacementPtyId]
         }
       }
       return {
