@@ -21,7 +21,7 @@ async function isDirExpanded(page: Page, relativeDir: string): Promise<boolean> 
   }, relativeDir)
 }
 
-test('clicking a folder name expands it instantly and a double-click rename does not flip it back', async ({
+test('clicking a folder name expands it instantly and double-click no longer starts a rename', async ({
   orcaPage
 }) => {
   await waitForSessionReady(orcaPage)
@@ -29,8 +29,11 @@ test('clicking a folder name expands it instantly and a double-click rename does
   await openFileExplorer(orcaPage)
 
   const srcRow = orcaPage.locator('[data-file-explorer-row]').filter({ hasText: /^src$/ })
-  const srcName = srcRow.locator('[data-file-explorer-row-name]')
+  const srcName = srcRow.getByText('src', { exact: true })
   const indexRow = orcaPage.locator('[data-file-explorer-row]').filter({ hasText: /^index\.ts$/ })
+  const explorerTextbox = orcaPage
+    .locator('[data-native-file-drop-target="file-explorer"]')
+    .getByRole('textbox')
   await expect(srcRow).toBeVisible({ timeout: 10_000 })
   expect(await isDirExpanded(orcaPage, 'src')).toBe(false)
 
@@ -40,24 +43,17 @@ test('clicking a folder name expands it instantly and a double-click rename does
   expect(await isDirExpanded(orcaPage, 'src')).toBe(true)
   await expect(indexRow).toBeVisible({ timeout: 10_000 })
 
-  // Collapse via the chevron so the double-click starts from a known state.
-  await srcRow.locator('svg').first().click({ force: true })
-  expect(await isDirExpanded(orcaPage, 'src')).toBe(false)
-  await expect(indexRow).toHaveCount(0, { timeout: 10_000 })
-
-  // Why: the first click of the double-click expands; the second must not
-  // collapse again under the rename input, so the folder stays expanded.
+  // Why: double-click on the name is just two toggles now (VS Code behavior),
+  // so an expanded folder ends up expanded again; rename lives on Enter and
+  // the context menu, so no input may appear.
   await srcName.dblclick({ force: true })
-  // Why: the inline rename input replaces the row inside the tree drop target;
-  // `:focus` is unreliable in the hidden E2E window, so scope by container.
-  const renameInput = orcaPage
-    .locator('[data-native-file-drop-target="file-explorer"]')
-    .getByRole('textbox')
-  await expect(renameInput).toBeVisible({ timeout: 5_000 })
-  await expect(renameInput).toHaveValue('src')
+  await expect(explorerTextbox).toHaveCount(0)
   expect(await isDirExpanded(orcaPage, 'src')).toBe(true)
   await expect(indexRow).toBeVisible({ timeout: 10_000 })
 
-  await renameInput.press('Escape')
-  await expect(renameInput).toHaveCount(0, { timeout: 5_000 })
+  await srcRow.press('Enter')
+  await expect(explorerTextbox).toBeVisible({ timeout: 5_000 })
+  await expect(explorerTextbox).toHaveValue('src')
+  await explorerTextbox.press('Escape')
+  await expect(explorerTextbox).toHaveCount(0, { timeout: 5_000 })
 })
