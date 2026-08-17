@@ -14235,7 +14235,8 @@
           "026653f21f": "CSS",
           "4daed43ae3": "C++",
           "4227cf50fe": "Bash",
-          "13822cdfda": "Plain text"
+          "13822cdfda": "Plain text",
+          "219961c2ed": "Double-click to edit the diagram source"
         },
         "RichMarkdownDocLinkMenu": {
           "e17b987473": "↑↓ navigate&nbsp;&nbsp;↵ select&nbsp;&nbsp;esc dismiss",

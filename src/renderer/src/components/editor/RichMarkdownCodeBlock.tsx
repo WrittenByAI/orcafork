@@ -1,166 +1,18 @@
-import React, { useCallback, useRef, useState } from 'react'
+import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { NodeViewContent, NodeViewWrapper } from '@tiptap/react'
+import { NodeSelection } from '@tiptap/pm/state'
 import type { NodeViewProps } from '@tiptap/react'
+import { richMarkdownAnnotationHighlightPluginKey } from './rich-markdown-annotation-highlight'
 import { Copy, Check } from 'lucide-react'
 import { useAppStore } from '@/store'
 import MermaidBlock from './MermaidBlock'
+import { RICH_MARKDOWN_CODE_BLOCK_LANGUAGES } from './rich-markdown-code-block-languages'
 import { translate } from '@/i18n/i18n'
 
-/**
- * Common languages shown in the selector. The user can also type a language
- * name directly in the markdown fence (```rust) and it will be preserved —
- * this list is just for quick picking in the UI.
- */
-const LANGUAGES = [
-  {
-    value: '',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.13822cdfda', 'Plain text')
-    }
-  },
-  {
-    value: 'bash',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.4227cf50fe', 'Bash')
-    }
-  },
-  { value: 'c', label: 'C' },
-  {
-    value: 'cpp',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.4daed43ae3', 'C++')
-    }
-  },
-  {
-    value: 'css',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.026653f21f', 'CSS')
-    }
-  },
-  {
-    value: 'diff',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.bf6ee5caaa', 'Diff')
-    }
-  },
-  {
-    value: 'go',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.edfcc64182', 'Go')
-    }
-  },
-  {
-    value: 'graphql',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.706fd85738', 'GraphQL')
-    }
-  },
-  {
-    value: 'html',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.8c4a3fa02d', 'HTML')
-    }
-  },
-  {
-    value: 'java',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.36536ad539', 'Java')
-    }
-  },
-  {
-    value: 'javascript',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.a209c57063', 'JavaScript')
-    }
-  },
-  {
-    value: 'json',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.78eba32de4', 'JSON')
-    }
-  },
-  {
-    value: 'kotlin',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.bcb236e2d8', 'Kotlin')
-    }
-  },
-  {
-    value: 'markdown',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.983b9576b4', 'Markdown')
-    }
-  },
-  {
-    value: 'mermaid',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.89d6cc14fb', 'Mermaid')
-    }
-  },
-  {
-    value: 'python',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.2391f9cda9', 'Python')
-    }
-  },
-  {
-    value: 'ruby',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.96182a2f64', 'Ruby')
-    }
-  },
-  {
-    value: 'rust',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.e72e6b03f4', 'Rust')
-    }
-  },
-  {
-    value: 'scss',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.5af8251002', 'SCSS')
-    }
-  },
-  {
-    value: 'shell',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.d01f55be57', 'Shell')
-    }
-  },
-  {
-    value: 'sql',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.3009f722b9', 'SQL')
-    }
-  },
-  {
-    value: 'swift',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.9e384d48dc', 'Swift')
-    }
-  },
-  {
-    value: 'typescript',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.88d777bc07', 'TypeScript')
-    }
-  },
-  {
-    value: 'xml',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.5ef5605cb7', 'XML')
-    }
-  },
-  {
-    value: 'yaml',
-    get label() {
-      return translate('auto.components.editor.RichMarkdownCodeBlock.74eab1d9b2', 'YAML')
-    }
-  }
-]
-
 export function RichMarkdownCodeBlock({
+  editor,
+  getPos,
   node,
   updateAttributes
 }: NodeViewProps): React.JSX.Element {
@@ -177,6 +29,111 @@ export function RichMarkdownCodeBlock({
     (settings?.theme === 'system' && window.matchMedia('(prefers-color-scheme: dark)').matches)
 
   const isMermaid = language === 'mermaid'
+  const mermaidSource = node.textContent.trim()
+  const hasMermaidDiagram = isMermaid && mermaidSource.length > 0
+  // Why optimistic: mermaid renders asynchronously, so starting at `false`
+  // would flash the source on every mount before collapsing it again.
+  const [isMermaidRendered, setIsMermaidRendered] = useState(true)
+  const [isEditingMermaidSource, setIsEditingMermaidSource] = useState(false)
+  const [isBlockSelected, setIsBlockSelected] = useState(false)
+  const [annotationState, setAnnotationState] = useState<'none' | 'noted' | 'active'>('none')
+  // Why ref: position math needs the current node without resubscribing the
+  // selection listener on every keystroke.
+  const nodeRef = useRef(node)
+  nodeRef.current = node
+  const isMermaidSourceCollapsed = hasMermaidDiagram && isMermaidRendered && !isEditingMermaidSource
+
+  // Why sticky: only a caret landing inside the fence means "edit this source",
+  // and only a selection that leaves the fence entirely means "done". A range
+  // selection covering the block — the diagram click, a cross-block drag, a
+  // drag inside the open source — must not toggle it, or the block would resize
+  // mid-gesture and the source would pop open behind the review-note composer.
+  useEffect(() => {
+    if (!hasMermaidDiagram) {
+      setIsEditingMermaidSource(false)
+      setIsBlockSelected(false)
+      return
+    }
+    const sync = (): void => {
+      const pos = getPos()
+      if (pos === undefined) {
+        return
+      }
+      const blockEnd = pos + nodeRef.current.nodeSize
+      const { from, to, empty } = editor.state.selection
+      const touchesBlock = from < blockEnd && to > pos
+      setIsEditingMermaidSource((isEditing) => {
+        if (empty) {
+          return from > pos && from < blockEnd
+        }
+        return touchesBlock ? isEditing : false
+      })
+      setIsBlockSelected(!empty && from <= pos + 1 && to >= blockEnd - 1)
+      // Why: the note highlight is an inline decoration over the hidden source,
+      // so the collapsed diagram has to carry the "has a review note" state and
+      // the attention pulse itself.
+      const highlights = richMarkdownAnnotationHighlightPluginKey.getState(editor.state)
+      const coversBlock = (range: { from: number; to: number }): boolean =>
+        range.from < blockEnd && range.to > pos
+      const activeRange = highlights?.activeRange
+      setAnnotationState(
+        activeRange && coversBlock(activeRange)
+          ? 'active'
+          : highlights?.noteRanges.some(coversBlock)
+            ? 'noted'
+            : 'none'
+      )
+    }
+    sync()
+    // Why transaction: note highlights arrive as metadata-only transactions,
+    // which fire neither `update` nor `selectionUpdate`.
+    editor.on('transaction', sync)
+    return () => {
+      editor.off('transaction', sync)
+    }
+  }, [editor, getPos, hasMermaidDiagram])
+
+  // Why NodeSelection and not a text range over the source: the source is
+  // display:none, and a text selection inside it cannot survive the round trip
+  // through the browser's own selection — the annotation target reads back empty.
+  const handleDiagramMouseDown = useCallback(
+    (event: React.MouseEvent) => {
+      if (event.button !== 0) {
+        return
+      }
+      const pos = getPos()
+      if (pos === undefined) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      const { state } = editor.view
+      editor.view.dispatch(state.tr.setSelection(NodeSelection.create(state.doc, pos)))
+      editor.view.focus()
+      // Why dispatch the click by hand: preventDefault above stops ProseMirror's
+      // own click sequence, so the routing that focuses an existing review note
+      // never runs. Feed it a position inside the fence, where the note lives.
+      editor.view.someProp('handleClick', (handleClick) =>
+        handleClick(editor.view, pos + 1, event.nativeEvent)
+      )
+    },
+    [editor, getPos]
+  )
+
+  // Why: with the source collapsed, a double-click is the way back into editing.
+  const handleDiagramDoubleClick = useCallback(
+    (event: React.MouseEvent) => {
+      const pos = getPos()
+      if (pos === undefined) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+      editor.commands.setTextSelection(pos + nodeRef.current.nodeSize - 1)
+      editor.view.focus()
+    },
+    [editor, getPos]
+  )
 
   const clearCopiedResetTimer = useCallback((): void => {
     if (copiedResetTimerRef.current !== null) {
@@ -227,20 +184,32 @@ export function RichMarkdownCodeBlock({
   )
 
   return (
-    <NodeViewWrapper className="rich-markdown-code-block-wrapper">
+    <NodeViewWrapper
+      className={[
+        'rich-markdown-code-block-wrapper',
+        isMermaidSourceCollapsed ? 'is-mermaid-source-collapsed' : '',
+        isMermaidSourceCollapsed && isBlockSelected ? 'is-mermaid-selected' : '',
+        isMermaidSourceCollapsed && annotationState !== 'none' ? 'is-mermaid-annotated' : '',
+        isMermaidSourceCollapsed && annotationState === 'active'
+          ? 'is-mermaid-annotation-active'
+          : ''
+      ]
+        .filter(Boolean)
+        .join(' ')}
+    >
       <select
         className="rich-markdown-code-block-lang"
         contentEditable={false}
         value={language}
         onChange={onChange}
       >
-        {LANGUAGES.map((lang) => (
+        {RICH_MARKDOWN_CODE_BLOCK_LANGUAGES.map((lang) => (
           <option key={lang.value} value={lang.value}>
             {lang.label}
           </option>
         ))}
         {/* If the document has a language not in our list, show it as-is */}
-        {language && !LANGUAGES.some((l) => l.value === language) ? (
+        {language && !RICH_MARKDOWN_CODE_BLOCK_LANGUAGES.some((l) => l.value === language) ? (
           <option value={language}>{language}</option>
         ) : null}
       </select>
@@ -268,14 +237,32 @@ export function RichMarkdownCodeBlock({
         )}
       </button>
       <NodeViewContent<'pre'> as="pre" />
-      {/* Why: mermaid diagrams render as a live SVG preview below the editable
-          source so users can see the result while editing. The code block stays
-          editable — the diagram is read-only output. This preview also goes
-          through MermaidBlock's sanitized SVG path, so it must opt out of
-          Mermaid HTML labels just like markdown preview to keep labels visible. */}
-      {isMermaid && node.textContent.trim() && (
-        <div contentEditable={false} className="mermaid-preview">
-          <MermaidBlock content={node.textContent.trim()} isDark={isDark} htmlLabels={false} />
+      {/* Why: a valid mermaid fence collapses to just its rendered SVG — the
+          source is still the editable code block, hidden by CSS until the caret
+          enters it (or the diagram fails to render). The preview goes through
+          MermaidBlock's sanitized SVG path, so it must opt out of Mermaid HTML
+          labels just like markdown preview to keep labels visible. */}
+      {hasMermaidDiagram && (
+        <div
+          contentEditable={false}
+          className="mermaid-preview"
+          onMouseDown={handleDiagramMouseDown}
+          onDoubleClick={handleDiagramDoubleClick}
+          title={
+            isMermaidSourceCollapsed
+              ? translate(
+                  'auto.components.editor.RichMarkdownCodeBlock.219961c2ed',
+                  'Double-click to edit the diagram source'
+                )
+              : undefined
+          }
+        >
+          <MermaidBlock
+            content={mermaidSource}
+            isDark={isDark}
+            htmlLabels={false}
+            onRenderStateChange={setIsMermaidRendered}
+          />
         </div>
       )}
     </NodeViewWrapper>

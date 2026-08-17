@@ -1,12 +1,19 @@
+// @vitest-environment happy-dom
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { Editor } from '@tiptap/core'
 import type { DiffComment } from '../../../../shared/diff-comment-types'
+import { Editor as TiptapEditor } from '@tiptap/core'
+import type { Node as ProseMirrorNode } from '@tiptap/pm/model'
+import { NodeSelection, TextSelection, type Selection } from '@tiptap/pm/state'
+import StarterKit from '@tiptap/starter-kit'
+import { createIsolatedMarkdownExtensionForTests } from './isolated-markdown-extension-for-tests'
 import {
   countRichMarkdownReviewMarkdownLines,
-  getRichMarkdownAnnotationButtonLeft,
-  getRichMarkdownAnnotationButtonTop,
   getRichMarkdownAnnotationHighlightRanges,
-  getRichMarkdownCommentAtPos
+  getRichMarkdownCommentAnchorTop,
+  getRichMarkdownCommentAtPos,
+  getRichMarkdownSelectionLineRange,
+  type RichMarkdownComposerState
 } from './rich-markdown-review-annotations'
 
 afterEach(() => {
@@ -29,26 +36,6 @@ describe('countRichMarkdownReviewMarkdownLines', () => {
     expect(countRichMarkdownReviewMarkdownLines(text)).toBe(100_001)
 
     expect(split).not.toHaveBeenCalled()
-  })
-})
-
-describe('getRichMarkdownAnnotationButtonTop', () => {
-  it('keeps the add-note button below short visible selections', () => {
-    expect(getRichMarkdownAnnotationButtonTop(120, 500)).toBe(128)
-  })
-
-  it('clamps the add-note button inside the visible editor shell for long selections', () => {
-    expect(getRichMarkdownAnnotationButtonTop(760, 500)).toBe(468)
-  })
-})
-
-describe('getRichMarkdownAnnotationButtonLeft', () => {
-  it('keeps the add-note button near the right edge when there is room', () => {
-    expect(getRichMarkdownAnnotationButtonLeft(700)).toBe(658)
-  })
-
-  it('clamps the add-note button inside narrow editor shells', () => {
-    expect(getRichMarkdownAnnotationButtonLeft(72)).toBe(40)
   })
 })
 
@@ -123,5 +110,101 @@ describe('rich markdown annotation block reuse', () => {
     expect(getRichMarkdownAnnotationHighlightRanges(none.editor, [], 0)).toEqual([])
     expect(getRichMarkdownCommentAtPos(none.editor, [], 0, 5)).toBeNull()
     expect(none.serializeCalls()).toBe(0)
+  })
+})
+
+// Why: a note taken on a collapsed mermaid fence anchors into a display:none
+// content hole, where coordsAtPos reports a box at the viewport origin.
+describe('getRichMarkdownCommentAnchorTop', () => {
+  function makeRect(top: number, height: number): DOMRect {
+    return {
+      top,
+      bottom: top + height,
+      height,
+      left: 0,
+      right: 0,
+      width: 0,
+      x: 0,
+      y: top,
+      toJSON: () => ({})
+    } as DOMRect
+  }
+
+  function makeAnchorEditor(coordsTop: number): { editor: Editor; wrapper: HTMLElement } {
+    const viewDom = document.createElement('div')
+    const wrapper = document.createElement('div')
+    const hiddenSource = document.createElement('pre')
+    wrapper.append(hiddenSource)
+    viewDom.append(wrapper)
+    document.body.append(viewDom)
+    hiddenSource.getBoundingClientRect = () => makeRect(0, 0)
+    wrapper.getBoundingClientRect = () => makeRect(300, 180)
+
+    const doc = {
+      forEach: () => {},
+      nodesBetween: () => {},
+      content: { size: 40 }
+    }
+    const editor = {
+      getJSON: () => ({ content: [] }),
+      state: { doc },
+      markdown: { serialize: () => 'line' },
+      view: {
+        dom: viewDom,
+        coordsAtPos: () => ({ top: coordsTop, bottom: coordsTop, left: 0, right: 0 }),
+        nodeDOM: () => hiddenSource,
+        domAtPos: () => ({ node: hiddenSource, offset: 0 })
+      }
+    } as unknown as Editor
+    return { editor, wrapper }
+  }
+
+  const block = { key: '0:1-3', startLine: 1, endLine: 3, from: 5, to: 20 }
+  const comment = { lineNumber: 1, selectedText: 'flowchart TD' } as DiffComment
+
+  afterEach(() => {
+    document.body.innerHTML = ''
+  })
+
+  it('anchors to the rendered fence when the caret position is not laid out', () => {
+    const { editor } = makeAnchorEditor(0)
+
+    expect(getRichMarkdownCommentAnchorTop(editor, comment, block, makeRect(100, 500), 20, 0)).toBe(
+      220
+    )
+  })
+
+  it('keeps the exact caret position when it is inside the rendered box', () => {
+    const { editor } = makeAnchorEditor(340)
+
+    expect(getRichMarkdownCommentAnchorTop(editor, comment, block, makeRect(100, 500), 20, 0)).toBe(
+      260
+    )
+  })
+})
+
+// Why: a collapsed mermaid diagram is selected as a node, while its expanded
+// source is selected as text. Both must file the note against the same lines, or
+// the add-note button reappears on a diagram that already carries a note.
+describe('getRichMarkdownSelectionLineRange', () => {
+  const markdown = '# Title\n\n```mermaid\nflowchart TD\n  A --> B\n```\n\nTail.\n'
+
+  function fenceRange(select: (doc: ProseMirrorNode) => Selection): RichMarkdownComposerState {
+    const editor = new TiptapEditor({
+      element: null,
+      extensions: [StarterKit, createIsolatedMarkdownExtensionForTests()],
+      content: markdown,
+      contentType: 'markdown'
+    })
+    editor.view.dispatch(editor.state.tr.setSelection(select(editor.state.doc)))
+    return getRichMarkdownSelectionLineRange(editor as unknown as Editor)
+  }
+
+  it('files a node-selected fence against the fence lines only', () => {
+    const nodeRange = fenceRange((doc) => NodeSelection.create(doc, 7))
+    const textRange = fenceRange((doc) => TextSelection.create(doc, 8, 30))
+
+    expect(nodeRange).toEqual({ startLine: 3, lineNumber: 6 })
+    expect(nodeRange).toEqual(textRange)
   })
 })

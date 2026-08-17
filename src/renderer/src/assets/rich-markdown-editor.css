@@ -999,6 +999,75 @@
   border-top: 1px solid color-mix(in srgb, var(--foreground) 8%, transparent);
 }
 
+/* A mermaid fence that renders cleanly shows only the diagram; the source stays
+   in the DOM (ProseMirror needs its content hole) and reappears via the node
+   view once the caret enters the block. */
+.rich-markdown-code-block-wrapper.is-mermaid-source-collapsed > pre {
+  display: none;
+}
+.rich-markdown-code-block-wrapper.is-mermaid-source-collapsed .mermaid-preview {
+  border-top: none;
+  cursor: pointer;
+  user-select: none;
+}
+/* Why: with the source hidden, ProseMirror's inline decorations have nothing
+   visible to paint, so the diagram itself carries the review-note state and the
+   attention pulse the highlighted source would otherwise show. */
+.rich-markdown-code-block-wrapper.is-mermaid-annotated {
+  border-color: color-mix(in srgb, var(--annotation-highlight) 55%, transparent);
+}
+.rich-markdown-code-block-wrapper.is-mermaid-annotation-active {
+  animation: rich-markdown-mermaid-attention 900ms ease-out;
+}
+
+@keyframes rich-markdown-mermaid-attention {
+  0% {
+    border-color: var(--annotation-highlight);
+    box-shadow: 0 0 0 4px color-mix(in srgb, var(--annotation-highlight) 16%, transparent);
+  }
+
+  42% {
+    border-color: color-mix(in srgb, var(--annotation-highlight) 80%, transparent);
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--annotation-highlight) 12%, transparent);
+  }
+
+  100% {
+    border-color: color-mix(in srgb, var(--annotation-highlight) 55%, transparent);
+    box-shadow: none;
+  }
+}
+
+/* Why: with the source hidden, ProseMirror's text highlight has nothing visible
+   to paint, so the diagram itself carries the "this fence is selected" state. */
+.rich-markdown-code-block-wrapper.is-mermaid-selected:not(.is-mermaid-annotated) {
+  outline: 2px solid color-mix(in srgb, var(--ring) 78%, transparent);
+  outline-offset: 2px;
+}
+/* Why brighten instead of adding a ring: an annotated fence already draws an
+   amber border, and a second outline around it reads as two nested frames. */
+.rich-markdown-code-block-wrapper.is-mermaid-annotated.is-mermaid-selected {
+  border-color: var(--annotation-highlight);
+}
+/* Why drop the generic node-selection ring here: the rules above already carry
+   the selected state, and ProseMirror's own outline stacks a second frame around
+   them. It also cannot express the annotated case, which brightens the border. */
+.rich-markdown-editor
+  .rich-markdown-code-block-wrapper.is-mermaid-source-collapsed.ProseMirror-selectednode {
+  outline: none;
+}
+
+/* Why hover-gated: with the source hidden these controls would otherwise sit
+   permanently on top of the diagram. */
+.rich-markdown-code-block-wrapper.is-mermaid-source-collapsed .rich-markdown-code-block-lang {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+.rich-markdown-code-block-wrapper.is-mermaid-source-collapsed:hover .rich-markdown-code-block-lang,
+.rich-markdown-code-block-wrapper.is-mermaid-source-collapsed
+  .rich-markdown-code-block-lang:focus-visible {
+  opacity: 1;
+}
+
 .rich-markdown-editor pre {
   padding: 14px 18px;
   border-radius: 8px;

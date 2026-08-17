@@ -10,7 +10,11 @@ import {
   resolveMarkdownLinkTarget
 } from './markdown-internal-links'
 import { scrollToAnchorInEditor } from './markdown-anchor-scroll'
-import { getRichMarkdownCommentAtPos } from './rich-markdown-review-annotations'
+import {
+  buildRichMarkdownCommentBlocks,
+  getRichMarkdownAnnotationHighlightRangesForComment,
+  getRichMarkdownCommentAtPos
+} from './rich-markdown-review-annotations'
 import type { DiffComment } from '../../../../shared/diff-comment-types'
 import { translate } from '@/i18n/i18n'
 import {
@@ -78,12 +82,19 @@ export function handleRichMarkdownEditorClick({
     return false
   }
   if (!modKey) {
-    const selectedComment = getRichMarkdownCommentAtPos(
-      editor,
-      markdownCommentsRef.current,
-      markdownSourceLineOffsetRef.current,
-      pos
-    )
+    const selectedComment =
+      getRichMarkdownCommentAtPos(
+        editor,
+        markdownCommentsRef.current,
+        markdownSourceLineOffsetRef.current,
+        pos
+      ) ??
+      getRichMarkdownCollapsedFenceComment(
+        editor,
+        markdownCommentsRef.current,
+        markdownSourceLineOffsetRef.current,
+        pos
+      )
     if (selectedComment) {
       scrollRichMarkdownReviewNoteCardIntoView(selectedComment.id)
     }
@@ -239,4 +250,36 @@ function openMarkdownLinkInClientOs({
     return
   }
   void window.api.shell.openFileUri(classified.uri)
+}
+
+/**
+ * Why: a mermaid fence renders as just its diagram, so a click on it resolves to
+ * the fence's own position — outside the note range, which lives in the hidden
+ * source. Match the note against the whole fence instead, so clicking a diagram
+ * focuses its review note exactly like clicking highlighted text does.
+ */
+function getRichMarkdownCollapsedFenceComment(
+  editor: Editor,
+  comments: readonly DiffComment[],
+  markdownSourceLineOffset: number,
+  pos: number
+): DiffComment | null {
+  // Why the half-open range: a block's `to` is the next block's node position, so
+  // an inclusive test would resolve a fence click to the preceding block.
+  const block = buildRichMarkdownCommentBlocks(editor).find(
+    (candidate) => candidate.from - 1 <= pos && pos < candidate.to
+  )
+  const node = block ? editor.state.doc.nodeAt(block.from - 1) : null
+  if (!block || node?.type.name !== 'codeBlock' || node.attrs.language !== 'mermaid') {
+    return null
+  }
+  return (
+    comments.find((comment) =>
+      getRichMarkdownAnnotationHighlightRangesForComment(
+        editor,
+        comment,
+        markdownSourceLineOffset
+      ).some((range) => range.from <= block.to && range.to >= block.from)
+    ) ?? null
+  )
 }
