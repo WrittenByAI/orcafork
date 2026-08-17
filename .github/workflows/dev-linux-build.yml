@@ -69,13 +69,20 @@ jobs:
 
       # Why retry: electron's postinstall pulls its binary from GitHub release
       # assets, whose CDN returns transient 504s often enough to fail a build.
+      # Why in bash rather than a retry action: every extra action is another
+      # codeload fetch during job setup, and those 429 under load — which is a
+      # failure mode no in-job retry can cover.
       - name: Install dependencies
-        uses: nick-fields/retry@v4
-        with:
-          timeout_minutes: 15
-          max_attempts: 3
-          retry_wait_seconds: 30
-          command: pnpm install --frozen-lockfile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            echo "::warning::pnpm install failed (attempt $attempt/3)"
+            sleep 30
+          done
+          echo "::error::pnpm install failed after 3 attempts"
+          exit 1
 
       # Why: build:release verifies the Linux computer-use provider by importing
       # AT-SPI bindings, which are runtime deps absent from stock Ubuntu runners.
