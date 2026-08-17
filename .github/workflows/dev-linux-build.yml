@@ -1,0 +1,144 @@
+name: Dev Linux Build
+
+# Why this fork needs its own: upstream's release-cut is wired to stablyai's
+# signing identity and publishes into stablyai's repos, so it cannot cut a build
+# here. This produces an unsigned Linux x64 build of any branch and drops it on a
+# single moving `dev` release, so the download URL never changes:
+#
+#   https://github.com/WrittenByAI/orcafork/releases/download/dev/orca-linux.AppImage
+#
+# Run it from the Actions tab — leave "Use workflow from" on main and type the
+# branch to build in the field below — or from the CLI:
+#
+#   gh workflow run dev-linux-build.yml --ref main -f ref=my-branch
+#
+# Why the branch is a separate input rather than just the picker: the workflow
+# file is always read from the ref you dispatch, so keeping the picker on main
+# guarantees a stale copy of this file on a feature branch is never what runs.
+
+on:
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch, tag, or SHA to build (default: the branch selected above)'
+        required: false
+        default: ''
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  # Why serialise rather than cancel: every run rewrites the same `dev` release,
+  # so two overlapping builds would race to own its assets.
+  group: dev-linux-build
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: linux x64
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          persist-credentials: false
+
+      # Why not the repo's install-node-dependencies action: that action lives in
+      # the checked-out tree, and this workflow is dispatched against refs whose
+      # copy of it may differ. Inlining keeps the build steps pinned to this file.
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      # Why: pnpm's bundled gyp_main.py is not executable on fresh Linux runners.
+      - name: Use external node-gyp
+        run: |
+          npm install -g node-gyp@11.5.0
+          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >>"$GITHUB_ENV"
+
+      # Why retry: electron's postinstall pulls its binary from GitHub release
+      # assets, whose CDN returns transient 504s often enough to fail a build.
+      - name: Install dependencies
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 15
+          max_attempts: 3
+          retry_wait_seconds: 30
+          command: pnpm install --frozen-lockfile
+
+      # Why: build:release verifies the Linux computer-use provider by importing
+      # AT-SPI bindings, which are runtime deps absent from stock Ubuntu runners.
+      - name: Install computer-use provider dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core xclip xdotool
+
+      # Why no ORCA_BUILD_IDENTITY and no PostHog key: both mark a build as
+      # official and switch its telemetry transport on. A fork build stays
+      # unofficial, which is also what keeps it from reporting as upstream.
+      - name: Build app
+        run: pnpm build:release
+        env:
+          # Why: the web bundle crosses Node's default old-space ceiling.
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      # Why --publish never: the packaged publish config points at stablyai/orca,
+      # which this token cannot write to. The release below is created explicitly.
+      - name: Package Linux artifacts
+        run: |
+          node config/scripts/ensure-native-runtime.mjs --runtime=electron
+          pnpm exec electron-builder --config config/electron-builder.config.cjs \
+            --linux AppImage deb --x64 --publish never
+
+      - name: Publish to the moving dev release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          BUILT_REF: ${{ inputs.ref || github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          sha="$(git rev-parse HEAD)"
+          # Why a notes file: the body is fenced code full of backticks, which a
+          # heredoc keeps readable where a quoted CLI argument would not.
+          cat >release-notes.md <<NOTES
+          Unsigned Linux x64 build of \`$BUILT_REF\` at \`${sha:0:7}\`.
+
+          Run it without installing:
+
+          \`\`\`bash
+          curl -fL -o orca.AppImage https://github.com/$GITHUB_REPOSITORY/releases/download/dev/orca-linux.AppImage
+          chmod +x orca.AppImage
+          ./orca.AppImage
+          \`\`\`
+
+          Built by [this run]($RUN_URL).
+          NOTES
+          # Why delete instead of retag: a release keeps its assets when its tag
+          # moves, so uploading would collide with the previous build's names.
+          gh release delete dev --yes --cleanup-tag || true
+          gh release create dev dist/orca-linux.AppImage dist/*.deb \
+            --target "$sha" \
+            --prerelease \
+            --title "Dev build — $BUILT_REF" \
+            --notes-file release-notes.md
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "### Dev Linux build"
+            echo
+            echo "- Ref: \`${{ inputs.ref || github.ref_name }}\`"
+            echo "- Download: https://github.com/${{ github.repository }}/releases/tag/dev"
+          } >>"$GITHUB_STEP_SUMMARY"
