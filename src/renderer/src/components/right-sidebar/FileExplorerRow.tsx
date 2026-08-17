@@ -12,7 +12,6 @@ import type { GitFileStatus } from '../../../../shared/git-status-types'
 import { STATUS_LABELS } from './status-display'
 import type { TreeNode } from './file-explorer-types'
 import { useFileExplorerRowDrag } from './useFileExplorerRowDrag'
-import { useDelayedDirLoadingIndicator } from './file-explorer-dir-loading-indicator'
 import { translate } from '@/i18n/i18n'
 import { CLOSE_ALL_CONTEXT_MENUS_EVENT } from '@/components/tab-bar/SortableTab'
 import type { RuntimeFileOperationArgs } from '@/runtime/runtime-file-client'
@@ -103,7 +102,6 @@ export function FileExplorerRow({
   onNativeDragExpandDir
 }: FileExplorerRowProps): React.JSX.Element {
   const FileIcon = getFileTypeIcon(node.relativePath || node.name)
-  const showLoadingIndicator = useDelayedDirLoadingIndicator(isLoading)
   const rowDropDir = node.isDirectory ? node.path : targetDir
   const { setRowDragNode, handleDragOver, handleDragEnter, handleDragLeave, handleDrop } =
     useFileExplorerRowDrag({
@@ -183,7 +181,7 @@ export function FileExplorerRow({
                   isExpanded && 'rotate-90'
                 )}
               />
-              {showLoadingIndicator ? (
+              {isLoading ? (
                 <Loader2 className="size-3 shrink-0 animate-spin text-muted-foreground" />
               ) : isExpanded ? (
                 <FolderOpen className="size-3 shrink-0 text-muted-foreground" />
