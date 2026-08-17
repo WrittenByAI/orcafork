@@ -5,7 +5,6 @@ import { detectLanguage } from '@/lib/language-detect'
 import { toast } from 'sonner'
 import type { TreeNode } from './file-explorer-types'
 import { FILE_EXPLORER_DRAGGABLE_SELECTOR } from './file-explorer-drag-scroll-marker'
-import type { DirToggleTiming } from './file-explorer-dir-toggle-timing'
 import { translate } from '@/i18n/i18n'
 import {
   getFileExplorerOwnerUnresolvedMessage,
@@ -46,7 +45,7 @@ type UseFileExplorerHandlersParams = {
 }
 
 type UseFileExplorerHandlersReturn = {
-  handleClick: (node: TreeNode, dirToggle?: DirToggleTiming) => void
+  handleClick: (node: TreeNode) => void
   handleDoubleClick: (node: TreeNode) => void
   handleWheelCapture: (e: React.WheelEvent<HTMLDivElement>) => void
 }
@@ -171,12 +170,7 @@ export function useFileExplorerHandlers({
   scrollRef
 }: UseFileExplorerHandlersParams): UseFileExplorerHandlersReturn {
   const handleClick = useCallback(
-    (node: TreeNode, dirToggle: DirToggleTiming = 'immediate') => {
-      if (dirToggle === 'skip' && node.isDirectory) {
-        // Why: the rename about to start owns this gesture; selection still applies.
-        setSelectedPath(node.path)
-        return
-      }
+    (node: TreeNode) => {
       void activateFileExplorerNode({
         node,
         activeWorktreeId,

@@ -47,68 +47,37 @@ function renderHandlers(toggleDir: (worktreeId: string, dirPath: string) => void
   return { ...hook, openFile, setSelectedPath }
 }
 
-describe('rename-hotspot directory toggle', () => {
+describe('file explorer click activation', () => {
   afterEach(() => cleanup())
 
-  it('toggles immediately when the click missed the rename hotspot', async () => {
-    const toggleDir = vi.fn()
-    const { result } = renderHandlers(toggleDir)
-
-    await act(async () => {
-      result.current.handleClick(directoryNode, 'immediate')
-      await Promise.resolve()
-    })
-
-    expect(toggleDir).toHaveBeenCalledWith('wt-1', directoryNode.path)
-  })
-
-  it('toggles a filename click immediately, without waiting out the double-click window', async () => {
+  it('toggles a directory synchronously on click, with no double-click window timer', () => {
     vi.useFakeTimers()
     try {
       const toggleDir = vi.fn()
-      const { result } = renderHandlers(toggleDir)
+      const { result, setSelectedPath } = renderHandlers(toggleDir)
 
-      await act(async () => {
-        result.current.handleClick(directoryNode)
-        await Promise.resolve()
-      })
+      act(() => result.current.handleClick(directoryNode))
 
-      // Why: no timer may be involved — a delay here is what read as lag on the folder name.
+      // Why: any delay here is what read as lag on the folder name vs. the chevron.
       expect(toggleDir).toHaveBeenCalledWith('wt-1', directoryNode.path)
+      expect(setSelectedPath).toHaveBeenCalledWith(directoryNode.path)
       expect(vi.getTimerCount()).toBe(0)
     } finally {
       vi.useRealTimers()
     }
   })
 
-  it('drops only the second click of a double-click rename so the folder does not flip back', async () => {
-    const toggleDir = vi.fn()
-    const { result, setSelectedPath } = renderHandlers(toggleDir)
-
-    await act(async () => {
-      result.current.handleClick(directoryNode, 'immediate')
-      await Promise.resolve()
-    })
-    await act(async () => {
-      result.current.handleClick(directoryNode, 'skip')
-      await Promise.resolve()
-    })
-
-    expect(toggleDir).toHaveBeenCalledTimes(1)
-    // Why: the rename about to start still needs the row selected.
-    expect(setSelectedPath).toHaveBeenLastCalledWith(directoryNode.path)
-  })
-
-  it('keeps opening files on the second click, which is not a directory toggle', async () => {
+  it('opens a file as a preview on click', async () => {
     const toggleDir = vi.fn()
     const { result, openFile } = renderHandlers(toggleDir)
 
     await act(async () => {
-      result.current.handleClick(fileNode, 'skip')
+      result.current.handleClick(fileNode)
       await Promise.resolve()
     })
 
     expect(toggleDir).not.toHaveBeenCalled()
     expect(openFile).toHaveBeenCalledTimes(1)
+    expect(openFile.mock.calls[0]?.[1]).toMatchObject({ preview: true })
   })
 })
