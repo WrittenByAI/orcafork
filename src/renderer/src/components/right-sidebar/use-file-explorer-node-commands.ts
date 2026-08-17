@@ -8,11 +8,6 @@ import {
   buildAddProjectFromFolderModalData,
   canShowAddAsProjectAction
 } from './file-explorer-add-project-action'
-import {
-  isRenameHotspotTarget,
-  resolveDirToggleTiming,
-  type DirToggleTiming
-} from './file-explorer-dir-toggle-timing'
 import type { FileExplorerRowProjection } from './file-explorer-row-projection'
 import type { FileExplorerSelectionMode } from './file-explorer-selection'
 import { folderRelativePathToIncludeGlob } from './file-search-include-pattern'
@@ -41,7 +36,7 @@ type UseFileExplorerNodeCommandsParams = {
   requestDelete: (node: TreeNode) => void
   requestDeleteAll: (nodes: TreeNode[]) => void
   refreshDir: (dirPath: string) => Promise<void>
-  handleClick: (node: TreeNode, dirToggle?: DirToggleTiming) => void
+  handleClick: (node: TreeNode) => void
   toggleDir: (worktreeId: string, dirPath: string) => void
   scrollToIndex: (index: number) => void
 }
@@ -131,11 +126,7 @@ export function useFileExplorerNodeCommands({
   const handleDuplicate = useFileDuplicate({ activeWorktreeId, worktreePath, refreshDir })
   const handleRowClick = useCallback(
     (node: TreeNode, event: React.MouseEvent<HTMLButtonElement>) => {
-      const dirToggle = resolveDirToggleTiming({
-        fromRenameHotspot: isRenameHotspotTarget(event.target),
-        clickCount: event.detail
-      })
-      selectRowWithModifiers(node, event, (target) => handleClick(target, dirToggle))
+      selectRowWithModifiers(node, event, handleClick)
     },
     [handleClick, selectRowWithModifiers]
   )
