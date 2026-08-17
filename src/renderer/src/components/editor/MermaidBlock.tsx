@@ -22,6 +22,7 @@ type MermaidBlockProps = {
   content: string
   isDark: boolean
   htmlLabels?: boolean
+  onRenderStateChange?: (rendered: boolean) => void
 }
 
 // Why: mermaid.render() manipulates global DOM state (element IDs, internal
@@ -50,11 +51,17 @@ function enqueueRender(fn: () => Promise<void>): void {
 export default function MermaidBlock({
   content,
   isDark,
-  htmlLabels = false
+  htmlLabels = false,
+  onRenderStateChange
 }: MermaidBlockProps): React.JSX.Element {
   const id = useId().replace(/:/g, '_')
   const containerRef = useRef<HTMLDivElement>(null)
   const [error, setError] = useState<string | null>(null)
+  // Why ref: the callback identity changes with every parent render; reading it
+  // through a ref keeps it out of the render effect's deps so a caller that
+  // re-renders on each keystroke does not re-run mermaid.
+  const onRenderStateChangeRef = useRef(onRenderStateChange)
+  onRenderStateChangeRef.current = onRenderStateChange
 
   useEffect(() => {
     let cancelled = false
@@ -80,10 +87,12 @@ export default function MermaidBlock({
             USE_PROFILES: { svg: true }
           })
           setError(null)
+          onRenderStateChangeRef.current?.(true)
         }
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Invalid mermaid syntax')
+          onRenderStateChangeRef.current?.(false)
           // Mermaid leaves an error element in the DOM on failure — clean it up.
           const errorEl = document.getElementById(`d${`mermaid-${id}`}`)
           errorEl?.remove()
