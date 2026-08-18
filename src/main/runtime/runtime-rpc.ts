@@ -53,6 +53,10 @@ type OrcaRuntimeRpcServerOptions = {
   platform?: NodeJS.Platform
   enableWebSocket?: boolean
   wsPort?: number
+  // Why: true when the caller set an explicit port (e.g. `orca serve --port`).
+  // Distinguishes that pin from the DEFAULT_WS_PORT default so transport bind
+  // order can prefer the pin over a stale STA-1511 fallback (issue #8535).
+  preferPinnedWsPort?: boolean
   webClientRoot?: string
   // Why: test-only overrides for the two time-bound constants below.
   // Production callers must not pass these — defaults are set by the design
@@ -199,6 +203,7 @@ const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'files.readTerminalArtifact',
   'files.readTerminalArtifactPreview',
   'files.resolveTerminalPath',
+  'files.searchPaths',
   'files.writeTerminalArtifact',
   'folderWorkspace.list',
   'git.abortMerge',
@@ -377,6 +382,7 @@ const MOBILE_RPC_METHOD_ALLOWLIST = new Set([
   'agentTeams.tmuxCompat',
   'terminal.clearBuffer',
   'terminal.close',
+  'terminal.closeTab',
   'terminal.create',
   'terminal.focus',
   'terminal.agentStatus',
@@ -449,6 +455,7 @@ export class OrcaRuntimeRpcServer {
   private readonly platform: NodeJS.Platform
   private readonly enableWebSocket: boolean
   private readonly wsPort: number
+  private readonly preferPinnedWsPort: boolean
   private readonly webClientRoot: string | undefined
   private readonly authToken = randomBytes(24).toString('hex')
   private readonly keepaliveIntervalMs: number
@@ -481,6 +488,7 @@ export class OrcaRuntimeRpcServer {
     platform = process.platform,
     enableWebSocket = false,
     wsPort = DEFAULT_WS_PORT,
+    preferPinnedWsPort = false,
     webClientRoot,
     keepaliveIntervalMs = KEEPALIVE_INTERVAL_MS,
     longPollCap = LONG_POLL_CAP
@@ -492,6 +500,7 @@ export class OrcaRuntimeRpcServer {
     this.platform = platform
     this.enableWebSocket = enableWebSocket
     this.wsPort = wsPort
+    this.preferPinnedWsPort = preferPinnedWsPort
     this.webClientRoot = webClientRoot
     this.keepaliveIntervalMs = keepaliveIntervalMs
     this.longPollCap = longPollCap
@@ -628,14 +637,31 @@ export class OrcaRuntimeRpcServer {
     connectionMode?: MobilePairingConnectionMode
     name?: string
     rotate?: boolean
-  }): Promise<ReturnType<OrcaRuntimeRpcServer['createPairingOffer']>> {
+  }): Promise<
+    | { available: false }
+    | {
+        available: true
+        pairingUrl: string
+        endpoint: string
+        deviceId: string
+        webClientUrl: string | null
+        /** Mode the returned offer actually encodes — 'local-only' when an
+         *  automatic request degraded because Relay could not be attached. */
+        connectionMode: MobilePairingConnectionMode
+      }
+  > {
     // Why: the renderer is outside the trust boundary; only the explicit
     // local-only value may suppress Relay provisioning.
     const connectionMode = args.connectionMode === 'local-only' ? 'local-only' : 'automatic'
     const pending = this.deviceRegistry?.getPendingDevice('mobile')
-    const switchingPendingToLocal =
-      connectionMode === 'local-only' && pending?.relayBinding !== undefined
-    if (args.rotate || switchingPendingToLocal) {
+    // Why: an offer's connection policy is part of its credential. Rotating on
+    // any policy switch here (not in the renderer) means a QR displayed under
+    // the old policy cannot pair under the new one, and windows reminting after
+    // a preference sync converge on one token instead of racing rotations.
+    const switchingPendingMode =
+      pending != null &&
+      this.deviceRegistry?.getMobilePairingConnectionMode(pending.deviceId) !== connectionMode
+    if (args.rotate || switchingPendingMode) {
       if (pending?.relayBinding) {
         // Why: the durable cloud revoke is recorded before rotating the local
         // token, so a previously displayed relay invite cannot outlive the QR.
@@ -644,7 +670,7 @@ export class OrcaRuntimeRpcServer {
     }
     const direct = this.createPairingOffer({
       ...args,
-      rotate: args.rotate || switchingPendingToLocal,
+      rotate: args.rotate || switchingPendingMode,
       scope: 'mobile'
     })
     if (!direct.available) {
@@ -652,21 +678,22 @@ export class OrcaRuntimeRpcServer {
     }
     this.deviceRegistry?.setMobilePairingConnectionMode(direct.deviceId, connectionMode)
     if (connectionMode === 'local-only' || !this.mobileRelayPairingProvider) {
-      return direct
+      return { ...direct, connectionMode: 'local-only' }
     }
     const device = this.deviceRegistry?.getDevice(direct.deviceId)
     const publicKeyB64 = this.getE2EEPublicKey()
     if (!device || !publicKeyB64) {
-      return direct
+      return { ...direct, connectionMode: 'local-only' }
     }
     try {
       const relayPairing = await this.mobileRelayPairingProvider.createPairingRelay(device.deviceId)
       if (!this.deviceRegistry?.setRelayBinding(device.deviceId, relayPairing.binding)) {
-        return direct
+        return { ...direct, connectionMode: 'local-only' }
       }
       this.mobileRelayPairingProvider.onDemandStateChanged?.()
       return {
         ...direct,
+        connectionMode: 'automatic',
         pairingUrl: encodePairingOffer({
           v: PAIRING_OFFER_VERSION,
           endpoint: direct.endpoint,
@@ -679,7 +706,7 @@ export class OrcaRuntimeRpcServer {
     } catch {
       // Why: relay is additive. A transient auth/director/control outage must
       // still yield the valid LAN/Tailscale pairing offer.
-      return direct
+      return { ...direct, connectionMode: 'local-only' }
     }
   }
 
@@ -862,10 +889,11 @@ export class OrcaRuntimeRpcServer {
           staticRoot: this.webClientRoot,
           // Why: keep the fallback port stable across restarts so paired
           // devices' stored endpoints stay valid (STA-1511) — the transport
-          // binds a persisted fallback before the preferred port. wsPort 0
-          // means the caller explicitly wants a random port (E2E) — don't
-          // pin it.
-          ...(this.wsPort !== 0 ? { fallbackPort: readWsFallbackPort(this.userDataPath) } : {})
+          // binds a persisted fallback before the preferred port unless the
+          // caller explicitly pinned a port (serve --port). wsPort 0 means
+          // the caller wants a random port (E2E) — don't pin it.
+          ...(this.wsPort !== 0 ? { fallbackPort: readWsFallbackPort(this.userDataPath) } : {}),
+          ...(this.preferPinnedWsPort ? { preferPinnedPort: true } : {})
         })
         const mobileSocketWiring = new MobileSocketWiring({
           deviceRegistry: this.deviceRegistry,
