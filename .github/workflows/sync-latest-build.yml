@@ -1,0 +1,93 @@
+name: Sync Latest + Build
+
+# Keeps branch `latest` = upstream stablyai/orca main + the fork's `features`
+# branch, and cuts a Linux build of it via the Dev Linux Build workflow.
+# The moving download URL stays:
+#
+#   https://github.com/WrittenByAI/orcafork/releases/download/dev/orca-linux.AppImage
+#
+# On a merge conflict the run fails and lists the conflicted files — resolve by
+# rebasing `features` onto upstream main locally and force-pushing it.
+
+on:
+  schedule:
+    - cron: '20 4 * * *'
+  workflow_dispatch: {}
+
+permissions:
+  contents: write
+  actions: write
+
+concurrency:
+  group: sync-latest-build
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: merge upstream + features
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout (blobless)
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+          filter: blob:none
+
+      - name: Merge upstream/main + features into latest
+        id: merge
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          git config user.name 'orcafork-sync'
+          git config user.email 'sync@users.noreply.github.com'
+          git remote add upstream https://github.com/stablyai/orca
+          git fetch --filter=blob:none upstream main
+          git fetch origin features latest || git fetch origin features
+          up="$(git rev-parse upstream/main)"
+          ft="$(git rev-parse origin/features)"
+          old="$(git rev-parse origin/latest 2>/dev/null || echo none)"
+
+          # Skip when latest already represents exactly this (upstream, features) pair.
+          if [ "$old" != none ]; then
+            if [ "$old" = "$ft" ] && git merge-base --is-ancestor "$up" "$ft"; then
+              echo "latest is already features@${ft:0:7} (contains upstream) — nothing to do"
+              echo "changed=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+            parents="$(git rev-list --parents -n1 "$old" | cut -d' ' -f2-)"
+            if [ "$parents" = "$up $ft" ]; then
+              echo "latest is already the merge of upstream@${up:0:7} + features@${ft:0:7}"
+              echo "changed=false" >>"$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+
+          git checkout -B latest "$up"
+          if ! git merge --no-edit -m "Merge features into upstream main" "$ft"; then
+            echo "::error::features conflicts with upstream main. Rebase features locally and force-push it."
+            git diff --name-only --diff-filter=U | sed 's/^/::error::conflict: /'
+            exit 1
+          fi
+          git push --force origin latest
+          echo "changed=true" >>"$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
+
+      - name: Dispatch Dev Linux Build for latest
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run dev-linux-build.yml --repo "$GITHUB_REPOSITORY" --ref main -f ref=latest
+
+      - name: Summarise
+        if: always()
+        run: |
+          {
+            echo "### Sync latest"
+            echo
+            echo "- Changed: \`${{ steps.merge.outputs.changed || 'n/a' }}\`"
+            echo "- latest: \`${{ steps.merge.outputs.sha || 'unchanged' }}\`"
+            echo "- Download (after the build finishes): https://github.com/${{ github.repository }}/releases/tag/dev"
+          } >>"$GITHUB_STEP_SUMMARY"
