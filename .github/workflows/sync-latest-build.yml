@@ -45,10 +45,11 @@ jobs:
           git config user.email 'sync@users.noreply.github.com'
           git remote add upstream https://github.com/stablyai/orca
           git fetch --filter=blob:none upstream main
-          git fetch origin features latest || git fetch origin features
+          git fetch origin '+refs/heads/features:refs/remotes/origin/features'
+          git fetch origin '+refs/heads/latest:refs/remotes/origin/latest' || true
           up="$(git rev-parse upstream/main)"
           ft="$(git rev-parse origin/features)"
-          old="$(git rev-parse origin/latest 2>/dev/null || echo none)"
+          old="$(git rev-parse --verify --quiet origin/latest || echo none)"
 
           # Skip when latest already represents exactly this (upstream, features) pair.
           if [ "$old" != none ]; then
