@@ -43,6 +43,7 @@ jobs:
         id: merge
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
         run: |
           set -euo pipefail
           git config user.name 'orcafork-sync'
@@ -128,6 +129,7 @@ jobs:
         if: steps.merge.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           PAIR: ${{ steps.merge.outputs.pair }}
           TARGET: ${{ steps.merge.outputs.ft }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
