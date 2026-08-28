@@ -124,6 +124,16 @@ export const SPEECH_MODEL_CATALOG: SpeechModelManifest[] = [
     streaming: false
   },
   {
+    id: 'codex-transcribe',
+    label: 'Codex (ChatGPT)',
+    description: 'Cloud transcription through your signed-in Codex account. No API key needed.',
+    type: 'codex',
+    provider: 'codex',
+    language: 'multilingual',
+    sampleRate: 16000,
+    streaming: false
+  },
+  {
     id: 'openai-gpt-4o-mini-transcribe',
     label: 'GPT-4o mini Transcribe',
     description:

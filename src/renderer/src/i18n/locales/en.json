@@ -12207,6 +12207,9 @@
           "usageLabel": "Usage",
           "noAllowance": "Cursor reported no usage allowance for this account.",
           "staleUsage": "Last known usage — the latest refresh failed: {{reason}}"
+        },
+        "VoiceSpeechModelSection": {
+          "32128f95e3": "Sign in to Codex first — run codex login in a terminal, then pick this model again."
         }
       },
       "right": {

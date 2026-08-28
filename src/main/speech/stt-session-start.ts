@@ -2,6 +2,7 @@ import { Worker } from 'node:worker_threads'
 import { getCatalogModel } from './model-catalog'
 import { OpenAiTranscriptionSession } from './openai-transcription-client'
 import { readOpenAiSpeechApiKey } from './openai-api-key-store'
+import { CodexTranscriptionSession } from './codex-transcription-client'
 import type { SttEventSink } from './stt-service'
 import type { SttSessionState } from './stt-session-state'
 import {
@@ -67,7 +68,7 @@ async function startSttSession(
     throw new Error(`Unknown model: ${modelId}`)
   }
 
-  if (manifest.provider === 'openai') {
+  if (manifest.provider === 'openai' || manifest.provider === 'codex') {
     if (state.worker) {
       const existingWorker = state.worker
       await stopSttDictation(state, owner, { cancelStarting: false })
@@ -77,7 +78,10 @@ async function startSttSession(
     if (modelState.status !== 'ready') {
       throw new Error(`Model not ready: ${modelState.status}`)
     }
-    state.cloudSession = new OpenAiTranscriptionSession(modelId, readOpenAiSpeechApiKey)
+    state.cloudSession =
+      manifest.provider === 'codex'
+        ? new CodexTranscriptionSession()
+        : new OpenAiTranscriptionSession(modelId, readOpenAiSpeechApiKey)
     state.activeModelId = modelId
     state.activeHotwordsFilePath = undefined
     state.eventSink = sink
