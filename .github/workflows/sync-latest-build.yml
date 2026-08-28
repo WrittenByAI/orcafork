@@ -1,13 +1,17 @@
 name: Sync Latest + Build
 
-# Keeps branch `latest` = upstream stablyai/orca main + the fork's `features`
-# branch, and cuts a Linux build of it via the Dev Linux Build workflow.
-# The moving download URL stays:
+# Builds upstream stablyai/orca main + this fork's `features` branch and drops
+# the result on the single moving `dev` release, so the URL never changes:
 #
 #   https://github.com/WrittenByAI/orcafork/releases/download/dev/orca-linux.AppImage
 #
-# On a merge conflict the run fails and lists the conflicted files — resolve by
-# rebasing `features` onto upstream main locally and force-pushing it.
+# Why the merge lives only in the runner's checkout and is never pushed: the
+# Actions token cannot push commits that touch .github/workflows, and upstream's
+# commits always do. The exact merge is reproducible locally from the two shas
+# recorded in the release notes.
+#
+# On a merge conflict the run fails and lists the conflicted files — rebase
+# `features` onto upstream main locally and force-push it.
 
 on:
   schedule:
@@ -16,17 +20,16 @@ on:
 
 permissions:
   contents: write
-  actions: write
 
 concurrency:
   group: sync-latest-build
   cancel-in-progress: false
 
 jobs:
-  sync:
-    name: merge upstream + features
+  build:
+    name: merge + linux x64
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 90
 
     steps:
       - name: Checkout (blobless)
@@ -34,8 +37,9 @@ jobs:
         with:
           fetch-depth: 0
           filter: blob:none
+          persist-credentials: false
 
-      - name: Merge upstream/main + features into latest
+      - name: Merge upstream/main + features
         id: merge
         env:
           GH_TOKEN: ${{ github.token }}
@@ -46,49 +50,118 @@ jobs:
           git remote add upstream https://github.com/stablyai/orca
           git fetch --filter=blob:none upstream main
           git fetch origin '+refs/heads/features:refs/remotes/origin/features'
-          git fetch origin '+refs/heads/latest:refs/remotes/origin/latest' || true
           up="$(git rev-parse upstream/main)"
           ft="$(git rev-parse origin/features)"
-          old="$(git rev-parse --verify --quiet origin/latest || echo none)"
+          pair="up=${up} ft=${ft}"
+          echo "pair=$pair" >>"$GITHUB_OUTPUT"
+          echo "ft=$ft" >>"$GITHUB_OUTPUT"
 
-          # Skip when latest already represents exactly this (upstream, features) pair.
-          if [ "$old" != none ]; then
-            if [ "$old" = "$ft" ] && git merge-base --is-ancestor "$up" "$ft"; then
-              echo "latest is already features@${ft:0:7} (contains upstream) — nothing to do"
-              echo "changed=false" >>"$GITHUB_OUTPUT"
-              exit 0
-            fi
-            parents="$(git rev-list --parents -n1 "$old" | cut -d' ' -f2-)"
-            if [ "$parents" = "$up $ft" ]; then
-              echo "latest is already the merge of upstream@${up:0:7} + features@${ft:0:7}"
-              echo "changed=false" >>"$GITHUB_OUTPUT"
-              exit 0
-            fi
+          # Skip when the dev release was already built from this exact pair.
+          prev="$(gh release view dev --json body --jq .body 2>/dev/null | grep -o 'up=[0-9a-f]* ft=[0-9a-f]*' || true)"
+          if [ "$prev" = "$pair" ]; then
+            echo "dev release is already built from $pair — nothing to do"
+            echo "changed=false" >>"$GITHUB_OUTPUT"
+            exit 0
           fi
 
           git checkout -B latest "$up"
-          if ! git merge --no-edit -m "Merge features into upstream main" "$ft"; then
+          if ! git merge --no-edit -m 'Merge features into upstream main' "$ft"; then
             echo "::error::features conflicts with upstream main. Rebase features locally and force-push it."
             git diff --name-only --diff-filter=U | sed 's/^/::error::conflict: /'
             exit 1
           fi
-          git push --force origin latest
           echo "changed=true" >>"$GITHUB_OUTPUT"
-          echo "sha=$(git rev-parse HEAD)" >>"$GITHUB_OUTPUT"
 
-      - name: Dispatch Dev Linux Build for latest
+      # Build steps below mirror dev-linux-build.yml; see the whys there.
+      - name: Setup pnpm
+        if: steps.merge.outputs.changed == 'true'
+        uses: pnpm/action-setup@v6
+        with:
+          run_install: false
+
+      - name: Setup Node.js
+        if: steps.merge.outputs.changed == 'true'
+        uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: pnpm
+
+      - name: Use external node-gyp
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          npm install -g node-gyp@11.5.0
+          echo "npm_config_node_gyp=$(npm root -g)/node-gyp/bin/node-gyp.js" >>"$GITHUB_ENV"
+
+      - name: Install dependencies
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            echo "::warning::pnpm install failed (attempt $attempt/3)"
+            sleep 30
+          done
+          echo "::error::pnpm install failed after 3 attempts"
+          exit 1
+
+      - name: Install computer-use provider dependencies
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core xclip xdotool
+
+      - name: Build app
+        if: steps.merge.outputs.changed == 'true'
+        run: pnpm build:release
+        env:
+          NODE_OPTIONS: --max-old-space-size=4096
+
+      - name: Package Linux artifacts
+        if: steps.merge.outputs.changed == 'true'
+        run: |
+          node config/scripts/ensure-native-runtime.mjs --runtime=electron
+          pnpm exec electron-builder --config config/electron-builder.config.cjs \
+            --linux AppImage deb --x64 --publish never
+
+      - name: Publish to the moving dev release
         if: steps.merge.outputs.changed == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh workflow run dev-linux-build.yml --repo "$GITHUB_REPOSITORY" --ref main -f ref=latest
+          PAIR: ${{ steps.merge.outputs.pair }}
+          TARGET: ${{ steps.merge.outputs.ft }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+          cat >release-notes.md <<NOTES
+          Unsigned Linux x64 build of upstream main + \`features\`.
+
+          \`$PAIR\`
+
+          Run it without installing:
+
+          \`\`\`bash
+          curl -fL -o orca.AppImage https://github.com/$GITHUB_REPOSITORY/releases/download/dev/orca-linux.AppImage
+          chmod +x orca.AppImage
+          ./orca.AppImage
+          \`\`\`
+
+          Built by [this run]($RUN_URL).
+          NOTES
+          gh release delete dev --yes --cleanup-tag || true
+          gh release create dev dist/orca-linux.AppImage dist/*.deb \
+            --target "$TARGET" \
+            --prerelease \
+            --title 'Dev build — latest (upstream + features)' \
+            --notes-file release-notes.md
 
       - name: Summarise
         if: always()
         run: |
           {
-            echo "### Sync latest"
+            echo "### Latest build"
             echo
             echo "- Changed: \`${{ steps.merge.outputs.changed || 'n/a' }}\`"
-            echo "- latest: \`${{ steps.merge.outputs.sha || 'unchanged' }}\`"
-            echo "- Download (after the build finishes): https://github.com/${{ github.repository }}/releases/tag/dev"
+            echo "- Pair: \`${{ steps.merge.outputs.pair || 'n/a' }}\`"
+            echo "- Download: https://github.com/${{ github.repository }}/releases/tag/dev"
           } >>"$GITHUB_STEP_SUMMARY"
