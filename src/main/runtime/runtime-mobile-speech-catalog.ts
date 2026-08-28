@@ -22,7 +22,9 @@ export class RuntimeMobileSpeechCatalog {
       return {
         id: manifest.id,
         label: manifest.label,
-        provider: manifest.provider === 'openai' ? 'openai' : 'local',
+        // Why: the mobile wire only knows 'local' | 'openai'; report every
+        // cloud provider (incl. codex) as 'openai' so old clients keep decoding.
+        provider: manifest.provider === 'local' ? 'local' : 'openai',
         sizeBytes: manifest.sizeBytes ?? null,
         recommended: manifest.recommended === true,
         status: state?.status ?? 'not-downloaded',

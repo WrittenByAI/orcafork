@@ -11953,6 +11953,9 @@
           "targetDescription": "Higher values increase contrast where possible. Background colors stay unchanged.",
           "subtle": "Subtle",
           "strong": "Strong"
+        },
+        "VoiceSpeechModelSection": {
+          "32128f95e3": "Sign in to Codex first — run codex login in a terminal, then pick this model again."
         }
       },
       "right": {
