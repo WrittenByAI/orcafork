@@ -84,7 +84,7 @@ export function VoiceSpeechModelSection({
             const isDownloading =
               mState?.status === 'downloading' || mState?.status === 'extracting'
             const isActive = voiceSettings.sttModel === manifest.id
-            const isCloud = manifest.provider === 'openai'
+            const isCloud = manifest.provider !== 'local'
             const deletePending = pendingDeleteModelIds.has(manifest.id)
             const sizeMb = manifest.sizeBytes ? Math.round(manifest.sizeBytes / 1_000_000) : null
 
@@ -95,6 +95,14 @@ export function VoiceSpeechModelSection({
                 onSelect={(event) => {
                   if (isReady) {
                     onUpdateVoiceSettings({ sttModel: manifest.id })
+                  } else if (manifest.provider === 'codex') {
+                    // Why: codex auth comes from `codex login`, not a key dialog.
+                    toast.error(
+                      translate(
+                        'auto.components.settings.VoiceSpeechModelSection.32128f95e3',
+                        'Sign in to Codex first — run codex login in a terminal, then pick this model again.'
+                      )
+                    )
                   } else if (isCloud) {
                     onOpenOpenAiDialog(manifest.id)
                   } else if (!isDownloading) {

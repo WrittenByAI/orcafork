@@ -12041,6 +12041,9 @@
         "TerminalRenderingSection": {
           "6d4c55bacc": "Inline Images",
           "fffab5890b": "Display images directly in the terminal using SIXEL, iTerm2 (IIP), and Kitty graphics protocols."
+        },
+        "VoiceSpeechModelSection": {
+          "32128f95e3": "Sign in to Codex first — run codex login in a terminal, then pick this model again."
         }
       },
       "right": {
