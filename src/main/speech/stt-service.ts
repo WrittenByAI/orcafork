@@ -5,6 +5,7 @@ import { getCatalogModel } from './model-catalog'
 import type { ModelManager } from './model-manager'
 import { OpenAiTranscriptionSession } from './openai-transcription-client'
 import { readOpenAiSpeechApiKey } from './openai-api-key-store'
+import { CodexTranscriptionSession } from './codex-transcription-client'
 import { getSherpaModulePath, getSttWorkerPath } from './stt-worker-paths'
 import { waitForSttWorkerStop, type SttWorkerStopOutcome } from './stt-worker-stop'
 
@@ -29,7 +30,7 @@ type StopInFlight = {
 
 export class SttService {
   private worker: Worker | null = null
-  private cloudSession: OpenAiTranscriptionSession | null = null
+  private cloudSession: OpenAiTranscriptionSession | CodexTranscriptionSession | null = null
   private modelManager: ModelManager
   private activeModelId: string | null = null
   private activeHotwordsFilePath: string | undefined
@@ -99,7 +100,7 @@ export class SttService {
       throw new Error(`Unknown model: ${modelId}`)
     }
 
-    if (manifest.provider === 'openai') {
+    if (manifest.provider === 'openai' || manifest.provider === 'codex') {
       if (this.worker) {
         const existingWorker = this.worker
         await this.stopDictation(owner, { cancelStarting: false })
@@ -111,7 +112,10 @@ export class SttService {
         throw new Error(`Model not ready: ${modelState.status}`)
       }
 
-      this.cloudSession = new OpenAiTranscriptionSession(modelId, readOpenAiSpeechApiKey)
+      this.cloudSession =
+        manifest.provider === 'codex'
+          ? new CodexTranscriptionSession()
+          : new OpenAiTranscriptionSession(modelId, readOpenAiSpeechApiKey)
       this.activeModelId = modelId
       this.activeHotwordsFilePath = undefined
       this.eventSink = sink

@@ -18,6 +18,7 @@ export const getOpenaiTranscriptionSearchEntry = createLocalizedCatalog(
       ...translateSearchKeyword('auto.components.settings.voice.pane.search.3d8b853963', 'speech'),
       ...translateSearchKeyword('auto.components.settings.voice.pane.search.10d45a9fce', 'stt'),
       ...translateSearchKeyword('auto.components.settings.voice.pane.search.04c25a6fb0', 'openai'),
+      ...translateSearchKeyword('auto.components.settings.voice.pane.search.c3a936fad3', 'codex'),
       ...translateSearchKeyword('auto.components.settings.voice.pane.search.2d206de105', 'api key'),
       ...translateSearchKeyword('auto.components.settings.voice.pane.search.f6e0dfa61c', 'cloud'),
       ...translateSearchKeyword(

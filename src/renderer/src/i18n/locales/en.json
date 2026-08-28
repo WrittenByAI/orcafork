@@ -11506,6 +11506,9 @@
         },
         "NativeChatSupportedAgents": {
           "label": "Supported agents:"
+        },
+        "VoiceSpeechModelSection": {
+          "32128f95e3": "Sign in to Codex first — run codex login in a terminal, then pick this model again."
         }
       },
       "right": {
