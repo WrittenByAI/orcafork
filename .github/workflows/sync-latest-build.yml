@@ -10,6 +10,11 @@ name: Sync Latest + Build
 # commits always do. The exact merge is reproducible locally from the two shas
 # recorded in the release notes.
 #
+# Why publish updates the `dev` release in place (upload --clobber + edit): the
+# Actions token here can modify an existing release but gets HTTP 403 creating
+# one. If the release is ever deleted, recreate it once with a user token:
+#   gh release create dev --prerelease --title 'Dev build — latest (upstream + features)' --notes 'bootstrap up=none ft=none'
+#
 # On a merge conflict the run fails and lists the conflicted files — rebase
 # `features` onto upstream main locally and force-push it.
 
@@ -131,7 +136,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
           PAIR: ${{ steps.merge.outputs.pair }}
-          TARGET: ${{ steps.merge.outputs.ft }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
@@ -150,9 +154,8 @@ jobs:
 
           Built by [this run]($RUN_URL).
           NOTES
-          gh release delete dev --yes --cleanup-tag || true
-          gh release create dev dist/orca-linux.AppImage dist/*.deb \
-            --target "$TARGET" \
+          gh release upload dev dist/orca-linux.AppImage dist/*.deb --clobber
+          gh release edit dev \
             --prerelease \
             --title 'Dev build — latest (upstream + features)' \
             --notes-file release-notes.md
