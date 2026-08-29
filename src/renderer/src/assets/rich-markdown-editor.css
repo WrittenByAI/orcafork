@@ -565,6 +565,102 @@
   font-size: 0.92em;
 }
 
+/* Fold toggles live in the left gutter, so collapsing never shifts the text. */
+.rich-markdown-editor h1,
+.rich-markdown-editor h2,
+.rich-markdown-editor h3,
+.rich-markdown-editor h4,
+.rich-markdown-editor h5,
+.rich-markdown-editor h6,
+.rich-markdown-editor li {
+  position: relative;
+}
+
+.rich-markdown-fold-toggle {
+  position: absolute;
+  top: 0;
+  /* Right edge flush with the text, so the hitbox starts immediately left of it. */
+  left: calc(-1 * max(0.9em, 18px));
+  display: flex;
+  width: max(0.9em, 18px);
+  /* Why 1lh: the first line box of whatever it sits on, so the chevron stays
+     centered across every heading scale and list line-height. */
+  height: 1lh;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  padding: 0;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+/* Bullets and numbers are drawn ~1em left of the item box; the toggle clears them
+   with the same visual gap the marker keeps from the text. */
+.rich-markdown-fold-toggle[data-fold-anchor='list-item'] {
+  left: calc(-1.4em - max(0.9em, 18px));
+}
+
+.rich-markdown-fold-toggle > svg {
+  width: max(0.7em, 14px);
+  height: max(0.7em, 14px);
+  transform: rotate(90deg);
+  transition: transform 120ms ease;
+}
+
+.rich-markdown-fold-toggle[data-collapsed='true'] > svg {
+  transform: none;
+}
+
+/* A collapsed block reads as folded at a glance: its chevron and its own bullet
+   or number pick up the accent the tag chips use. */
+.rich-markdown-editor .rich-markdown-fold-toggle[data-collapsed='true'] {
+  color: var(--rich-markdown-accent);
+}
+
+.rich-markdown-editor li.rich-markdown-fold-collapsed::marker {
+  color: var(--rich-markdown-accent);
+}
+
+.rich-markdown-editor h1:hover > .rich-markdown-fold-toggle,
+.rich-markdown-editor h2:hover > .rich-markdown-fold-toggle,
+.rich-markdown-editor h3:hover > .rich-markdown-fold-toggle,
+.rich-markdown-editor h4:hover > .rich-markdown-fold-toggle,
+.rich-markdown-editor h5:hover > .rich-markdown-fold-toggle,
+.rich-markdown-editor h6:hover > .rich-markdown-fold-toggle,
+.rich-markdown-editor li:hover .rich-markdown-fold-toggle,
+.rich-markdown-fold-toggle[data-collapsed='true'] {
+  opacity: 1;
+}
+
+.rich-markdown-fold-ellipsis {
+  margin-left: 0.4em;
+  border: 0;
+  padding: 0 0.05em 0 0.22em;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--muted) 55%, transparent);
+  color: var(--muted-foreground);
+  cursor: pointer;
+  font-size: max(0.72em, 12px);
+  font-weight: 600;
+  /* Why: the three dots read as a target, not punctuation, when spaced apart. */
+  letter-spacing: 0.22em;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.rich-markdown-fold-ellipsis:hover {
+  background: color-mix(in srgb, var(--muted) 85%, transparent);
+  color: var(--foreground);
+}
+
+.rich-markdown-editor .rich-markdown-folded {
+  display: none;
+}
+
 .rich-markdown-editor p,
 .rich-markdown-editor ul,
 .rich-markdown-editor ol,
