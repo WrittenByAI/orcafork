@@ -33,6 +33,7 @@ import { safeReactNodeViewRenderer } from './safe-react-node-view-renderer'
 import { positionStableNodeViewUpdate } from './position-stable-node-view-update'
 import { DragSelectionGuard } from './drag-selection-guard'
 import { createRichMarkdownAnnotationHighlightExtension } from './rich-markdown-annotation-highlight'
+import { createRichMarkdownTagChipExtension } from './rich-markdown-tag-chip'
 import type { RichMarkdownEditorCodec } from './rich-markdown-source-transport'
 import { createRichMarkdownHtmlSuperscriptLink } from './rich-markdown-html-superscript-link'
 import type { RichMarkdownHtmlSuperscriptLinkContext } from './rich-markdown-html-superscript-link-context'
@@ -249,7 +250,8 @@ export function createRichMarkdownExtensions({
         gfm: true
       }
     }),
-    createRichMarkdownAnnotationHighlightExtension()
+    createRichMarkdownAnnotationHighlightExtension(),
+    createRichMarkdownTagChipExtension()
   ]
 
   if (includePlaceholder) {

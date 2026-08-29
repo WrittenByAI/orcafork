@@ -497,11 +497,17 @@
 }
 
 .rich-markdown-editor {
+  /* Shared by tag chips and collapsed fold markers so both read as one accent. */
+  --rich-markdown-accent: #0969da;
   min-height: 100%;
   padding: 24px 32px 96px;
   font-size: calc(14px + (var(--editor-font-zoom-level, 0) * 1px));
   line-height: 1.7;
   outline: none;
+}
+
+.dark .rich-markdown-editor {
+  --rich-markdown-accent: #58a6ff;
 }
 
 .rich-markdown-editor p.is-editor-empty:first-child::before {
@@ -941,6 +947,17 @@
   background: color-mix(in srgb, var(--foreground) 8%, transparent);
   font-size: 0.88em;
   font-family: var(--font-mono, monospace);
+}
+
+/* Why: chips are decorations over plain `#tag` text, so the padding has to stay
+   small enough that the caret still lands between the characters it wraps. */
+.rich-markdown-editor .rich-markdown-tag-chip {
+  padding: 0.1em 0.42em;
+  border-radius: 999px;
+  background: color-mix(in srgb, currentColor 10%, transparent);
+  color: var(--rich-markdown-accent);
+  font-size: 0.92em;
+  white-space: nowrap;
 }
 
 .rich-markdown-code-block-wrapper {
