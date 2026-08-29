@@ -30,3 +30,19 @@ export function canHoldDocLink(
     !isDocLinkLiteralCodeTextNode(node, parent)
   )
 }
+
+/**
+ * The `[[target]]` literal covering an offset in a text block — the state a link
+ * is in while the caret still sits inside it, before it converts to an atom.
+ */
+export function findDocLinkLiteralAtOffset(text: string, offset: number): string | null {
+  for (const match of text.matchAll(DOC_LINK_PATTERN)) {
+    if (match.index === undefined) {
+      continue
+    }
+    if (offset >= match.index && offset <= match.index + match[0].length) {
+      return match[1]
+    }
+  }
+  return null
+}
