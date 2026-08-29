@@ -22,6 +22,7 @@ import {
   type RichMarkdownRuntimeSettings
 } from './rich-markdown-editor-click-routing'
 import { createRichMarkdownKeyHandler } from './rich-markdown-key-handler'
+import { recordRichMarkdownModClickPress } from './rich-markdown-mod-click-state'
 import { commitRichMarkdownSerialization } from './rich-markdown-serialization-commit'
 import {
   createRichMarkdownImageResolverContext,
@@ -139,7 +140,11 @@ export function createRichMarkdownEditorConfig(params: EditorConfigParams): UseE
         spellcheck: getRichMarkdownSpellcheckAttribute(richMarkdownSpellcheckEnabled)
       },
       handleDOMEvents: {
-        cut: handleRichMarkdownCut
+        cut: handleRichMarkdownCut,
+        mousedown: (_view, event) => {
+          recordRichMarkdownModClickPress(event, isMac ? event.metaKey : event.ctrlKey)
+          return false
+        }
       },
       handlePaste: (view, event, slice) =>
         handleRichMarkdownPaste({

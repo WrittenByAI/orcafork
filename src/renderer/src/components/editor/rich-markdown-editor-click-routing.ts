@@ -21,6 +21,9 @@ import {
   classifyHtmlSuperscriptLinkAction,
   type RichMarkdownHtmlSuperscriptLinkContext
 } from './rich-markdown-html-superscript-link-context'
+import { findDocLinkLiteralAtOffset } from './rich-markdown-doc-link-scan'
+import { wasRichMarkdownModClickPressed } from './rich-markdown-mod-click-state'
+import { parseMarkdownDocLink } from './markdown-doc-links'
 
 export type ActivateMarkdownLink = (
   href: string,
@@ -55,6 +58,33 @@ type RichMarkdownEditorClickRoutingOptions = {
   worktreeRoot: string | null
 }
 
+// Why: leaf placeholder is one character wide, so text offsets stay aligned with
+// ProseMirror positions inside the block.
+const LEAF_PLACEHOLDER = '\ufffc'
+
+function findRichMarkdownDocLinkElementTarget(event: MouseEvent): string | null {
+  const target = event.target
+  if (!(target instanceof Element)) {
+    return null
+  }
+  return target.closest('[data-doc-link-target]')?.getAttribute('data-doc-link-target') || null
+}
+
+function findRichMarkdownDocLinkLiteralAt(view: EditorView, pos: number): string | null {
+  // Why the guard: resolve() throws on a position outside the document, which a
+  // stale click position can be after a concurrent edit.
+  const resolved = view.state.doc.resolve(pos)
+  const parent = resolved?.parent
+  if (!parent?.isTextblock || parent.type.spec.code === true) {
+    return null
+  }
+  const literal = findDocLinkLiteralAtOffset(
+    parent.textBetween(0, parent.content.size, '\n', LEAF_PLACEHOLDER),
+    resolved.parentOffset
+  )
+  return literal ? (parseMarkdownDocLink(literal)?.target ?? null) : null
+}
+
 export function handleRichMarkdownEditorClick({
   activateMarkdownLink,
   editorRef,
@@ -77,7 +107,9 @@ export function handleRichMarkdownEditorClick({
   const editor = editorRef.current
   const sourceSnapshot = htmlSuperscriptLinkContext.getSnapshot()
   const sourceOwner = sourceSnapshot.sourceOwner
-  const modKey = isMac ? event.metaKey : event.ctrlKey
+  // Why also the press: the modifier is often released before the mouse button,
+  // and by the click event ctrlKey/metaKey is already false.
+  const modKey = (isMac ? event.metaKey : event.ctrlKey) || wasRichMarkdownModClickPressed(event)
   if (!editor) {
     return false
   }
@@ -112,8 +144,23 @@ export function handleRichMarkdownEditorClick({
       worktreeRoot
     })
   }
+  // Why the DOM, not nodeAt(pos): posAtCoords resolves to the position *after* an
+  // atom for anything past its leading edge, so a click on most of a doc link
+  // reports the following text node and the link never opens (#link-click).
+  const docLinkTarget = findRichMarkdownDocLinkElementTarget(event)
+  if (docLinkTarget) {
+    onOpenDocLinkRef.current?.(docLinkTarget)
+    return true
+  }
   if (clickedNode?.type.name === 'markdownDocLink') {
     onOpenDocLinkRef.current?.(clickedNode.attrs.target as string)
+    return true
+  }
+  // Why: a link the caret still sits inside is plain [[target]] text, not an atom
+  // yet — mod-clicking it must navigate like the converted node does.
+  const literalTarget = findRichMarkdownDocLinkLiteralAt(view, pos)
+  if (literalTarget) {
+    onOpenDocLinkRef.current?.(literalTarget)
     return true
   }
   const href =
