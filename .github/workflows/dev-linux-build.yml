@@ -131,11 +131,14 @@ jobs:
 
           Built by [this run]($RUN_URL).
           NOTES
-          # Why delete instead of retag: a release keeps its assets when its tag
-          # moves, so uploading would collide with the previous build's names.
-          gh release delete dev --yes --cleanup-tag || true
-          gh release create dev dist/orca-linux.AppImage dist/*.deb \
-            --target "$sha" \
+          # Why upload --clobber rather than delete + create: the fork's
+          # GITHUB_TOKEN cannot create a release (POST /releases answers 403
+          # "Resource not accessible by integration"), and the delete had already
+          # taken the moving `dev` release with it. Overwriting the assets of the
+          # existing release keeps the download URL stable and stays within the
+          # permissions the token actually has — same as sync-latest-build.yml.
+          gh release upload dev dist/orca-linux.AppImage dist/*.deb --clobber
+          gh release edit dev \
             --prerelease \
             --title "Dev build — $BUILT_REF" \
             --notes-file release-notes.md
