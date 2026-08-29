@@ -15248,6 +15248,10 @@
                 "21d8c463e5": "Toggle H5",
                 "dc239b41ad": "Create a collapsible section with a deep heading summary."
               }
+            },
+            "fold": {
+              "95af69a9f0": "Collapse section",
+              "3a57237001": "Expand section"
             }
           }
         },
