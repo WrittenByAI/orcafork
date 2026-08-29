@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { toast } from 'sonner'
+import { translate } from '@/i18n/i18n'
 import type { MarkdownDocument } from '../../../../shared/filesystem-entry-types'
 import { useAppStore } from '@/store'
 import { getConnectionId } from '@/lib/connection-context'
@@ -210,7 +212,20 @@ export function useMarkdownDocuments(
         void openMarkdownDocument(resolution.document, {
           anchor: getMarkdownDocLinkAnchor(target)
         })
+        return
       }
+      // Why: opening nothing at all reads as a broken click; say which way it failed.
+      toast.error(
+        resolution.status === 'ambiguous'
+          ? translate(
+              'auto.components.editor.useMarkdownDocuments.be689289cd',
+              'Several documents match this link'
+            )
+          : translate(
+              'auto.components.editor.useMarkdownDocuments.41239bee36',
+              'No document matches this link'
+            )
+      )
     },
     [docIndex, openMarkdownDocument]
   )
