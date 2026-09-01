@@ -1,5 +1,8 @@
 import type { ParsedAgentStatusPayload } from '../../../../shared/agent-status-types'
-import type { SleepingAgentLaunchConfig } from '../../../../shared/agent-session-resume'
+import type {
+  AgentProviderSessionMetadata,
+  SleepingAgentLaunchConfig
+} from '../../../../shared/agent-session-resume'
 import type { StartupCommandDelivery } from '../../../../shared/codex-startup-delivery'
 import type { ProjectExecutionRuntimeResolution } from '../../../../shared/project-execution-runtime'
 import type { EventProps } from '../../../../shared/telemetry-events'
@@ -49,7 +52,7 @@ export type PtyConnectResult = {
   snapshotRows?: number
   isAlternateScreen?: boolean
   sessionExpired?: boolean
-  coldRestore?: { scrollback: string; cwd: string }
+  coldRestore?: { scrollback: string; cwd: string; cols?: number; rows?: number }
   replay?: string
   startupCwdFallback?: { kind: 'worktree'; cwd: string }
   /** Trailing partial escape the daemon emulator held mid-parse; the reattach
@@ -69,6 +72,21 @@ type PtyCallbacks = {
   onStatus?: (shell: string) => void
   onError?: (message: string, errors?: string[]) => void
   onExit?: (code: number) => void
+  onRecoveryStateChange?: (state: PtyTransportRecoveryState) => void
+}
+
+export type PtyTransportRecoveryState = {
+  phase:
+    | 'connecting'
+    | 'connected'
+    | 'recovering'
+    | 'backoff'
+    | 'disconnected'
+    | 'offline'
+    | 'ended'
+    | 'disposed'
+  epoch: number
+  attempt: number
 }
 
 export type PtyTransport = {
@@ -84,7 +102,9 @@ export type PtyTransport = {
     initiallyHidden?: boolean
     command?: string
     env?: Record<string, string>
+    envToDelete?: string[]
     launchConfig?: SleepingAgentLaunchConfig
+    resumeProviderSession?: AgentProviderSessionMetadata
     launchToken?: string
     launchAgent?: TuiAgent
     startupCommandDelivery?: StartupCommandDelivery
@@ -120,6 +140,9 @@ export type PtyTransport = {
     }
   ) => boolean
   isConnected: () => boolean
+  getRecoveryState?: () => PtyTransportRecoveryState
+  /** Starts a fresh connection epoch while preserving the authoritative remote PTY identity. */
+  retryRecovery?: () => boolean
   getPtyId: () => string | null
   getConnectionId?: () => string | null | undefined
   /** The runtime captured by this transport; legacy remote PTY ids do not
@@ -140,8 +163,10 @@ export type IpcPtyTransportOptions = {
   cwd?: string
   cwdFallback?: 'worktree'
   env?: Record<string, string>
+  envToDelete?: string[]
   command?: string
   launchConfig?: SleepingAgentLaunchConfig
+  resumeProviderSession?: AgentProviderSessionMetadata
   launchToken?: string
   launchAgent?: TuiAgent
   startupCommandDelivery?: StartupCommandDelivery
@@ -157,6 +182,8 @@ export type IpcPtyTransportOptions = {
   onPtyExit?: (ptyId: string) => void
   onTitleChange?: (title: string, rawTitle: string) => void
   onPtySpawn?: (ptyId: string) => void
+  /** Rebind an existing pane after its provider replaces the PTY identity. */
+  onPtyRebind?: (ptyId: string, replacedPtyId: string) => void
   onBell?: () => void
   onAgentBecameIdle?: (title: string) => void
   onAgentBecameWorking?: () => void
