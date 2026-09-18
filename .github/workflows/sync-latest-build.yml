@@ -17,11 +17,27 @@ name: Sync Latest + Build
 #
 # On a merge conflict the run fails and lists the conflicted files — rebase
 # `features` onto upstream main locally and force-push it.
+#
+# Before building, the run typechecks and runs the unit tests that sit next to
+# every file the fork changes, so a broken rebase never reaches the release.
+# To vet a rebase without publishing, push it to a scratch branch and run:
+#   gh workflow run sync-latest-build.yml --ref main -f features_ref=<branch> -f check_only=true
 
 on:
   schedule:
     - cron: '20 4 * * *'
-  workflow_dispatch: {}
+  workflow_dispatch:
+    inputs:
+      features_ref:
+        description: 'Fork branch to merge onto upstream main'
+        required: false
+        default: features
+        type: string
+      check_only:
+        description: 'Typecheck and test only; skip build and publish'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -49,22 +65,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
+          FEATURES_REF: ${{ inputs.features_ref || 'features' }}
+          CHECK_ONLY: ${{ inputs.check_only == true }}
         run: |
           set -euo pipefail
           git config user.name 'orcafork-sync'
           git config user.email 'sync@users.noreply.github.com'
           git remote add upstream https://github.com/stablyai/orca
           git fetch --filter=blob:none upstream main
-          git fetch origin '+refs/heads/features:refs/remotes/origin/features'
+          git fetch origin "+refs/heads/${FEATURES_REF}:refs/remotes/origin/features-under-test"
           up="$(git rev-parse upstream/main)"
-          ft="$(git rev-parse origin/features)"
+          ft="$(git rev-parse origin/features-under-test)"
           pair="up=${up} ft=${ft}"
           echo "pair=$pair" >>"$GITHUB_OUTPUT"
+          echo "up=$up" >>"$GITHUB_OUTPUT"
           echo "ft=$ft" >>"$GITHUB_OUTPUT"
 
           # Skip when the dev release was already built from this exact pair.
           prev="$(gh release view dev --json body --jq .body 2>/dev/null | grep -o 'up=[0-9a-f]* ft=[0-9a-f]*' || true)"
-          if [ "$prev" = "$pair" ]; then
+          if [ "$CHECK_ONLY" != true ] && [ "$prev" = "$pair" ]; then
             echo "dev release is already built from $pair — nothing to do"
             echo "changed=false" >>"$GITHUB_OUTPUT"
             exit 0
@@ -72,7 +91,7 @@ jobs:
 
           git checkout -B latest "$up"
           if ! git merge --no-edit -m 'Merge features into upstream main' "$ft"; then
-            echo "::error::features conflicts with upstream main. Rebase features locally and force-push it."
+            echo "::error::$FEATURES_REF conflicts with upstream main. Rebase it locally and force-push it."
             git diff --name-only --diff-filter=U | sed 's/^/::error::conflict: /'
             exit 1
           fi
@@ -117,21 +136,57 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y python3-gi gir1.2-atspi-2.0 at-spi2-core xclip xdotool
 
-      - name: Build app
+      - name: Typecheck
         if: steps.merge.outputs.changed == 'true'
+        run: pnpm run typecheck
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+
+      # Why only tests beside changed files: the full suite is upstream's job;
+      # this gate catches what a rebase onto moved/split upstream code breaks.
+      - name: Test the fork's changes
+        if: steps.merge.outputs.changed == 'true'
+        env:
+          UP: ${{ steps.merge.outputs.up }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          declare -A seen=()
+          tests=()
+          add() { if [ -f "$1" ] && [ -z "${seen[$1]:-}" ]; then seen[$1]=1; tests+=("$1"); fi; }
+          while IFS= read -r f; do
+            case "$f" in
+              *.test.ts|*.test.tsx) add "$f" ;;
+              *)
+                base="${f%.*}"
+                for t in "$base".test.ts "$base".test.tsx "$base".*.test.ts "$base".*.test.tsx; do add "$t"; done
+                ;;
+            esac
+          done < <(git diff --name-only --diff-filter=AMR "$UP" HEAD -- src | grep -E '\.(ts|tsx)$' || true)
+          if [ "${#tests[@]}" -eq 0 ]; then
+            echo "No unit tests sit next to the fork's changes."
+            exit 0
+          fi
+          printf 'Running %s test files:\n' "${#tests[@]}"
+          printf '  %s\n' "${tests[@]}"
+          node config/scripts/ensure-native-runtime.mjs --runtime=node
+          pnpm exec vitest run --config config/vitest.config.ts "${tests[@]}"
+
+      - name: Build app
+        if: steps.merge.outputs.changed == 'true' && inputs.check_only != true
         run: pnpm build:release
         env:
           NODE_OPTIONS: --max-old-space-size=4096
 
       - name: Package Linux artifacts
-        if: steps.merge.outputs.changed == 'true'
+        if: steps.merge.outputs.changed == 'true' && inputs.check_only != true
         run: |
           node config/scripts/ensure-native-runtime.mjs --runtime=electron
           pnpm exec electron-builder --config config/electron-builder.config.cjs \
             --linux AppImage deb --x64 --publish never
 
       - name: Publish to the moving dev release
-        if: steps.merge.outputs.changed == 'true'
+        if: steps.merge.outputs.changed == 'true' && inputs.check_only != true
         env:
           GH_TOKEN: ${{ github.token }}
           GH_REPO: ${{ github.repository }}
@@ -166,6 +221,7 @@ jobs:
           {
             echo "### Latest build"
             echo
+            echo "- Features ref: \`${{ inputs.features_ref || 'features' }}\` (check only: \`${{ inputs.check_only == true }}\`)"
             echo "- Changed: \`${{ steps.merge.outputs.changed || 'n/a' }}\`"
             echo "- Pair: \`${{ steps.merge.outputs.pair || 'n/a' }}\`"
             echo "- Download: https://github.com/${{ github.repository }}/releases/tag/dev"
