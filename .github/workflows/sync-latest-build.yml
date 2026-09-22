@@ -130,6 +130,23 @@ jobs:
           echo "::error::pnpm install failed after 3 attempts"
           exit 1
 
+      # Why a second install: mobile/ is its own pnpm project with its own lockfile,
+      # so the root install leaves mobile/node_modules empty and build:mobile-web
+      # cannot resolve React Native or Expo.
+      - name: Install mobile dependencies
+        if: steps.merge.outputs.changed == 'true'
+        working-directory: mobile
+        run: |
+          for attempt in 1 2 3; do
+            if pnpm install --frozen-lockfile; then
+              exit 0
+            fi
+            echo "::warning::mobile pnpm install failed (attempt $attempt/3)"
+            sleep 30
+          done
+          echo "::error::mobile pnpm install failed after 3 attempts"
+          exit 1
+
       - name: Install computer-use provider dependencies
         if: steps.merge.outputs.changed == 'true'
         run: |
