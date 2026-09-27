@@ -217,6 +217,8 @@ export function FileExplorerRow({
           <span
             // Why: marks the rename hotspot so the row's click handler can drop
             // the directory toggle on the second click of a double-click rename.
+            // Why: still the hotspot for the click-timing rule, though rename now
+            // lives on Enter and the context menu rather than on double click.
             {...{ [RENAME_HOTSPOT_ATTR]: '' }}
             className={cn(
               'truncate',
@@ -233,12 +235,6 @@ export function FileExplorerRow({
                   ? { color: 'var(--git-decoration-ignored)' }
                   : undefined
             }
-            onDoubleClick={(e) => {
-              // Why: scope rename to the filename text so "pin preview" and the
-              // directory toggle stay reachable on the icon and empty row area.
-              e.stopPropagation()
-              onStartRename(node)
-            }}
           >
             {node.name}
           </span>
