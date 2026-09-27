@@ -1,5 +1,5 @@
 // @vitest-environment happy-dom
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { Editor as TiptapEditor } from '@tiptap/core'
 import StarterKit from '@tiptap/starter-kit'
 import { Code } from '@tiptap/extension-code'
@@ -11,8 +11,17 @@ import {
   RICH_MARKDOWN_TAG_CHIP_CLASS
 } from './rich-markdown-tag-chip'
 
+// Why: an undestroyed view leaves a ProseMirror DOMObserver timer that fires
+// after happy-dom tears down, which fails the run with "document is not defined".
+const editors: TiptapEditor[] = []
+afterEach(() => {
+  while (editors.length > 0) {
+    editors.pop()?.destroy()
+  }
+})
+
 function makeEditor(markdown: string): TiptapEditor {
-  return new TiptapEditor({
+  const editor = new TiptapEditor({
     // Why: TipTap only wires ProseMirror plugins once a view exists, so plugin
     // state stays empty with the element: null harness other editor tests use.
     element: document.createElement('div'),
@@ -26,6 +35,8 @@ function makeEditor(markdown: string): TiptapEditor {
     content: markdown,
     contentType: 'markdown'
   })
+  editors.push(editor)
+  return editor
 }
 
 function chipTexts(editor: TiptapEditor): string[] {
